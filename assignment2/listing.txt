@@ -1,0 +1,3007 @@
+#pragma once
+/**
+ * @file commands.h
+ * @author Justen Di Ruscio (3624673)
+ * @brief Contents related to executing and parsing commands with
+ * myshell.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <jd/string.h>
+#include <jd/vector.h>
+
+/**
+ * @brief Integral value used to indicate which command should be executed by
+ * myshell based on user's input. Unknown is not a command name, it indicates
+ * the command name is unknown by myshell.
+ *
+ */
+enum CommandName { Unknown, Cd, Exit, Fg, Bg };
+
+/**
+ * @brief Parses the provided string, comparing it against known myshell
+ * commands, returning identified command name contained in string. Sets errno
+ * upon error.
+ *
+ * @param commandName
+ * @return enum CommandName
+ */
+enum CommandName parseCommandName(const String* const commandName);
+
+/**
+ * @brief Executes an internal command with the identified command name and the
+ * user provided command arguments (including the string of the command name).
+ * Sets errno upon error.
+ *
+ * @param name parsed, identified command name of internal command
+ * @param commandArgs Vector of Strings of the separated user provided args
+ * @return int return code of executing the internal command
+ */
+int execInternal(const enum CommandName name, const Vector* const commandArgs);
+
+/**
+ * @brief Executes a system command based on the user provided command
+ * arguments. Sets errno upon error.
+ *
+ * @param cmdArgs Vector of STrings of the separated user provided command args
+ * @return int return code of executing the internal command
+ */
+int execSystem(const Vector* const cmdArgs);
+#pragma once
+/**
+ * @file bg.h
+ * @author Justen Di Ruscio (3624673)
+ * @brief Contents related to the handling of the internal command to background
+ * processes.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <jd/vector.h>
+#include <sys/types.h>
+
+#define BG_COMMAND_NAME \
+  "bg"  // command name as a string expected on the command line
+
+/**
+ * @brief Executes the background command
+ *
+ * @param commandName command name as a string for error messages
+ * @param commandArgs Vector of Strings of the separated args provided by user
+ * @return int return code of the command (errno)
+ */
+int executeBg(const char* const commandName, const Vector* const commandArgs);
+#pragma once
+/**
+ * @file cd.h
+ * @author Justen Di Ruscio (3624673)
+ * @brief Contents related to the handling of internal command to change
+ * directories.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <jd/vector.h>
+
+#define CD_COMMAND_NAME \
+  "cd"  // string command name expected on the command line
+
+/**
+ * @brief Executes the change directory command
+ *
+ * @param commandName command name as a string for error messages
+ * @param commandArgs Vector of Strings of the separated args provided by user
+ * @return int return code of the command (errno)
+ */
+int executeCd(const char *const commandName, const Vector *const commandArgs);
+#pragma once
+/**
+ * @file exit.h
+ * @author Justen Di Ruscio (3624673)
+ * @brief Contents related to exiting myshell
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <jd/vector.h>
+
+#define EXIT_COMMAND_NAME \
+  "exit"  // string command name expected on the command line
+
+/**
+ * @brief Executes the exit command
+ *
+ * @param commandName command name as a string for error messages
+ * @param commandArgs Vector of Strings of the separated args provided by user
+ * @return int return code of the command (errno)
+ */
+int executeExit(const char *const commandName, const Vector *const commandArgs);
+#pragma once
+/**
+ * @file fg.h
+ * @author Justen Di Ruscio (3624673)
+ * @brief Contents related to the handling of the internal command to foreground
+ * processes.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <jd/vector.h>
+
+#define FG_COMMAND_NAME \
+  "fg"  // command name as a string expected on the command line
+
+/**
+ * @brief Executes the foreground command
+ *
+ * @param commandName command name as a string for error messages
+ * @param commandArgs Vector of Strings of the separated args provided by user
+ * @return int return code of the command (errno)
+ */
+int executeFg(const char *const commandName, const Vector *const commandArgs);
+#pragma once
+/**
+ * @file job_states.h
+ * @author Justen Di Ruscio (3624673)
+ * @brief Contents related to process states and transitioning between them.
+ * Vectors of PIDs to track states of child processes and a useful wait
+ * function.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <jd/vector.h>
+#include <sys/types.h>
+
+extern Vector fgPids;         // processes in foreground
+extern Vector suspendedPids;  // suspended processes
+extern Vector bgPids;         // processes in background
+
+/**
+ * @brief Waits for all PIDs listed in fgPids using WUNTRACED flag. Updates job
+ * state vectors based on status of stopped process. Sets errno upon error.
+ *
+ * @return true successfully waited and managed process states
+ * @return false failed - an error occurred
+ */
+bool waitForForegroundPids();
+#pragma once
+/**
+ * @file prompt.h
+ * @author Justen Di Ruscio (3624673)
+ * @brief Function symbols and macros specific to myshell's user prompt.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <jd/string.h>
+
+#define ARG_DELIMETER " \n\r\t"  // delimeters separating arguments
+#define ARG_DELIMETER_LEN 4      // number of argument delimeters
+#define PIPE_DELIMETER "|"       // delimeters separating piped commands
+#define PIPE_DELIMETER_LEN 1     // number of pipe delimeters
+
+/**
+ * @brief Default chars to use when stripping in readInputLine
+ *
+ */
+extern const String defaultStripChars;
+
+/**
+ * @brief Prints the user prompt. Uses cwd as the string to store the current
+ * working directory. Resizes cwd if it's not large enough. Exits upon error, as
+ * either a system call failed or the machine is out of memory.
+ *
+ * @param cwd String to store current working directory path. Resized if
+ * necessary.
+ */
+void printPrompt(String *const cwd);
+
+/**
+ * @brief Reads entire user input line from stdin and returns a cleaned version
+ * of the user's input. If EOF (Ctrl+D) is received, userInput is set to the
+ * exit command. Otherwise, userInput is set to the stripped version
+ * of user input line, removing any leading and lagging characters that are
+ * contains in stripChars. Sets errno upon error.
+ *
+ * @param userInput out-parameter containing a cleaned version of the user's
+ * input
+ * @param stripChars String of chars to strip from userInput. A default string
+ * will be used if NULL is provided
+ * @return true Successfully read and cleaned user input.
+ * @return false Error occurred; failed operations.
+ */
+bool readInputLine(String *const userInput, const String *stripChars);
+#pragma once
+/**
+ * @file signal_handlers.h
+ * @author Justen Di Ruscio (3624673)
+ * @brief Function symbols of public functions to handle signals
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <signal.h>
+
+/**
+ * @brief Executes specific signal handling function based on sigNum
+ *
+ * @param sigNum the signal number received by the process
+ */
+void handleSignal(const int sigNum);
+/**
+ * @file error.c
+ * @author Justen Di Ruscio (3624673)
+ * @brief Contains definitions for common error handling/checking functions
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <jd/error.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+void handleErrorMsg(const int errorNumber) {
+  const char *errorString = strerror(errorNumber);
+  if (errorString == (char *)NULL) {
+    errorString =
+        "Invalid error number. Cannot deduce error message from error number";
+  }
+  fprintf(stderr, "(pid=%i) error = %i - %s\n", getpid(), errorNumber,
+          errorString);
+}
+
+void handleExitError(const int errorNumber) {
+  handleErrorMsg(errorNumber);
+  exit(errorNumber);
+}
+
+bool memoryOverlaps(const void *const first, const void *const second,
+                    const unsigned dataSize) {
+  const char *firstBytes = (char *)first;
+  const char *secondBytes = (char *)second;
+  const bool firstOverlapsSecond =
+      firstBytes <= secondBytes && firstBytes + dataSize > secondBytes;
+  const bool secondOverlapsFirst =
+      secondBytes <= firstBytes && secondBytes + dataSize > firstBytes;
+  return firstOverlapsSecond || secondOverlapsFirst;
+}
+/**
+ * @file list.c
+ * @author Justen Di Ruscio (3624673)
+ * @brief Unused and incomplete. Provides definitions for linked list
+ * functions.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include "list_private.h"
+#include <jd/list.h>
+
+#include <errno.h>  // errno, EPERM
+#include <stdio.h>  // fprintf
+#include <stdlib.h> // malloc
+#include <string.h> // memcpy
+
+List list_construct(const size_t dataSize) {
+  List result = {.head = (void *)NULL,
+                 .tail = (void *)NULL,
+                 .length = 0,
+                 .dataSize = dataSize};
+  return result;
+}
+
+List list_copyConstruct(const List *const other) {
+  List newList = list_construct(0);
+
+  // Argument Validity Check
+  errno = 0;
+  if (other == (List *)NULL) {
+    fprintf(
+        stderr,
+        "field 'other' of list_copyConstruct must point to a valid address\n");
+    errno = EPERM;
+    return newList;
+  }
+
+  // Copy Construct
+  newList.dataSize = other->dataSize;
+  ListNodePair firstAndLast =
+      list_newNodes(other->length, other->dataSize, (void *)NULL);
+  // TODO: check error
+  newList.head = firstAndLast.first;
+  newList.tail = firstAndLast.second;
+  newList.tail->next = (ListNode *)NULL;
+  return newList;
+}
+void list_freeNodes(List *const list);
+void list_freeNodesAndElements(List *const list);
+
+ListNode *list_nodeAt(const size_t index);
+void *list_elementAt(const size_t index);
+
+bool list_pushFront(List *const list, const void *const element);
+bool list_pushBack(List *const list, const void *const element);
+bool list_pushAt(List *const list, const size_t index,
+                 const void *const element);
+
+// Private:
+
+ListNode *list_newNode(const size_t dataSize, const void *const element) {
+  // Argument Validity Check
+  errno = 0;
+  if (dataSize == 0) {
+    fprintf(stderr,
+            "field 'dataSize' in list_newNode must be greater than 0\n");
+    errno = EPERM;
+    return (ListNode *)NULL;
+  }
+
+  // Allocate
+  void *const listNodeBuffer = malloc(sizeof(ListNode) + dataSize);
+  if (listNodeBuffer == (void *)NULL) {
+    // errno set by malloc
+    fprintf(stderr,
+            "failure allocating memory for new ListNode in list_newNode\n");
+    return (ListNode *)NULL;
+  }
+  ListNode *newNode = (ListNode *)listNodeBuffer;
+  newNode->data = (char *)listNodeBuffer + sizeof(ListNode);
+  newNode->next = (ListNode *)NULL;
+
+  // copy element contents over
+  if (element != (void *)NULL) {
+    memcpy(newNode->data, element, dataSize);
+  }
+  return newNode;
+}
+
+ListNodePair list_newNodes(const size_t numNodes, const size_t dataSize,
+                           const void *const elements) {
+  ListNodePair result = {.first = (ListNode *)NULL, .second = (ListNode *)NULL};
+
+  // Argument Validity Checks
+  errno = 0;
+  if (numNodes == 0) {
+    fprintf(stderr,
+            "field 'numNodes in list_newNodes must be greater than 0\n");
+    errno = EPERM;
+    return result;
+  }
+  if (dataSize == 0) {
+    fprintf(stderr,
+            "field 'dataSize' in list_newNodes must be greater than 0\n");
+    errno = EPERM;
+    return result;
+  }
+
+  // Allocate
+  void *const listNodeBuffer = malloc(sizeof(ListNode) * numNodes + dataSize);
+  if (listNodeBuffer == (void *)NULL) {
+    // errno set by malloc
+    fprintf(stderr,
+            "failure allocating memory for new ListNode in list_newNodes\n");
+    return result;
+  }
+  ListNode *newNode = (ListNode *)listNodeBuffer;
+  result.first = newNode;
+
+  // Assign each node content from large allocated buffer
+  const size_t totalSize = sizeof(ListNode) + dataSize;
+  ListNode *currentNode;
+  char *currentNodeBytes;
+  if (elements == (void *)NULL) { // only assign node members
+    for (size_t nodeIdx = 0; nodeIdx < numNodes; ++nodeIdx) {
+      currentNodeBytes = (char *)newNode + nodeIdx * totalSize;
+      currentNode = (ListNode *)currentNode;
+      currentNode->data = (void *)(currentNodeBytes + sizeof(ListNode));
+      currentNode->next = (ListNode *)(currentNodeBytes + totalSize);
+    }
+  } else { // assign node members and data elements
+    for (size_t nodeIdx = 0; nodeIdx < numNodes; ++nodeIdx) {
+      currentNodeBytes = (char *)newNode + nodeIdx * totalSize;
+      currentNode = (ListNode *)currentNode;
+      currentNode->data = (void *)(currentNodeBytes + sizeof(ListNode));
+      currentNode->next = (ListNode *)(currentNodeBytes + totalSize);
+      memcpy(newNode->data, (char *)elements + dataSize * nodeIdx, dataSize);
+    }
+  }
+  result.second = currentNode; // last node in allocated block
+  return result;
+}
+/**
+ * @file string.c
+ * @author Justen Di Ruscio (3624673)
+ * @brief Definitions for arbitrary length, null terminated strings and their
+ * manipulation. These Strings are not small-string-optimized.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#define _POSIX_C_SOURCE 200809L
+
+#include <jd/string.h>
+
+#include <stdio.h>  // fprintf
+#include <stdlib.h> // malloc
+
+String string_constructEmpty() {
+  String result = {.data = (char *)NULL, .length = 0, .capacity = 0};
+  return result;
+}
+
+OptionalString string_constructCapacity(const size_t capacity) {
+  const char fooName[] = "string_constructCapacity";
+  String string = string_constructEmpty();
+  OptionalString result = {.data = string, .valid = false};
+
+  if (capacity == 0) {
+    result.data = string;
+    return result;
+  }
+
+  void *const newStringBuff = malloc(capacity);
+  if (newStringBuff == (void *)NULL) {
+    fprintf(stderr, "Error allocating memory for string in %s\n", fooName);
+    return result; // errno set by malloc
+  }
+
+  string.capacity = capacity;
+  string.data = (char *)newStringBuff;
+  result.data = string;
+  result.valid = true;
+  return result;
+}
+
+OptionalString string_copyConstruct(const String *const other) {
+  const char fooName[] = "string_copyConstruct";
+  String string = string_constructEmpty();
+  OptionalString result = {.data = string, .valid = false};
+
+  // Argument Validity Check
+  errno = 0;
+  if (other == (String *)NULL) {
+    fprintf(stderr,
+            "field 'other' of %s must point to a "
+            "valid address\n",
+            fooName);
+    errno = EPERM;
+    return result;
+  }
+
+  // Copy Construct
+  string.length = other->length;
+  string.capacity = other->capacity;
+  void *const newStringBuff = malloc(string.capacity);
+  if (newStringBuff == (void *)NULL) {
+    fprintf(stderr, "Unable to allocate memory for string in %s\n", fooName);
+    return result; // errno set by malloc
+  }
+  string.data = (char *)newStringBuff;
+  strcpy(string.data, other->data);
+  string.data[string.length] = '\0';
+  result.valid = true;
+  result.data = string;
+  return result;
+}
+
+OptionalString string_copyConstructChar(const char *const other) {
+  const char fooName[] = "string_copyConstructChar";
+  String string = string_constructEmpty();
+  OptionalString result = {.data = string, .valid = false};
+
+  // Argument Validity Check
+  errno = 0;
+  if (other == (char *)NULL) {
+    fprintf(stderr,
+            "field 'other' of %s must point to a "
+            "valid address\n",
+            fooName);
+    errno = EPERM;
+    return result;
+  }
+
+  // Copy Construct
+  string.length = strlen(other);
+  string.capacity = string.length * 1.5 + 1;
+  void *const newStringBuff = malloc(string.capacity);
+  if (newStringBuff == (void *)NULL) {
+    fprintf(stderr, "Unable to allocate memory for string in %s\n", fooName);
+    return result; // errno set by malloc
+  }
+  string.data = (char *)newStringBuff;
+  strcpy(string.data, other);
+  string.data[string.length] = '\0';
+  result.valid = true;
+  result.data = string;
+  return result;
+}
+
+void string_freeData(const String *const str) {
+  // Return if there's nothing to free
+  if (str == (String *)NULL) {
+    return;
+  }
+  // Free data member
+  free(str->data);
+}
+
+void string_freeDataVoid(const void *const str) {
+  // Return if there's nothing to free
+  if (str == (void *)NULL) {
+    return;
+  }
+  // Free data member
+  const String *const string = (String *)str;
+  string_freeData(string);
+}
+
+bool string_reserve(String *const str, const size_t newCapacity) {
+  const char fooName[] = "string_reserve";
+
+  // Argument Validity Checks
+  errno = 0;
+  if (str == (String *)NULL) {
+    fprintf(stderr,
+            "field 'str' of %s must point to a "
+            "valid address\n",
+            fooName);
+    errno = EPERM;
+    return false;
+  }
+
+  // Reserve
+  if (newCapacity > str->capacity) {
+    const void *const newBuffer = realloc(str->data, newCapacity);
+    if (newBuffer == (void *)NULL) {
+      fprintf(stderr, "Error reserving string buffer with realloc in %s\n",
+              fooName);
+      return false; // realloc sets errno
+    }
+    str->data = (char *)newBuffer;
+    str->capacity = newCapacity;
+  }
+  return true;
+}
+
+OptionalVector string_split(const String *const str, const char *const delim) {
+  const char fooName[] = "string_split";
+  OptionalVector result = {.data = {.data = NULL}, .valid = false};
+
+  // Argument Validity Check
+  errno = 0;
+  if (str == (String *)NULL) {
+    fprintf(stderr,
+            "field 'str' of %s must point to a "
+            "valid address\n",
+            fooName);
+    errno = EPERM;
+    return result;
+  }
+  if (delim == (char *)NULL) {
+    fprintf(stderr,
+            "field 'delim' of %s must point to a "
+            "valid address\n",
+            fooName);
+    errno = EPERM;
+    return result;
+  }
+
+  // Split String into Parts
+
+  // create vector to store split string pieces
+  const unsigned initialCapacity = 8;
+  OptionalVector v = vector_constructCapacity(initialCapacity, sizeof(String));
+  if (!v.valid) {
+    fprintf(stderr,
+            "Unable to construct vector for string pieces with default "
+            "capacity of %u in %s\n",
+            initialCapacity, fooName);
+    return result; // errno set by vector_constructCapacity
+  }
+  Vector splitStrings = v.data;
+  splitStrings.elementDeleter = string_freeDataVoid;
+
+  // tokenize string into pieces, pushing into vector
+  char *stringChars = str->data;
+  char *savePtr = (char *)NULL;
+  while (true) {
+    const char *const piece = strtok_r(stringChars, delim, &savePtr);
+    if (piece == (char *)NULL) { // no more tokens
+      break;
+    }
+    OptionalString stringPiece = string_copyConstructChar(piece);
+    if (!stringPiece.valid) {
+      fprintf(stderr, "Unable to construct string from token in %s\n", fooName);
+      return result; // errno set by string_copyConstructChar
+    }
+    const bool pushed = vector_pushBack(&splitStrings, &stringPiece.data);
+    if (!pushed) {
+      fprintf(stderr,
+              "Error pushing string token %s into vector of tokens in %s\n",
+              stringPiece.data.data, fooName);
+    }
+    stringChars = (char *)NULL;
+  }
+
+  // return container holding split strings
+  result.valid = true;
+  result.data = splitStrings;
+  return result;
+}
+
+int string_compare(const String *const first, const String *const second) {
+  return strcmp(first->data, second->data);
+}
+
+int string_compareChar(const String *const first, const char *const second) {
+  return strcmp(first->data, second);
+}
+
+bool string_contains(const String *const string, const char element) {
+  const char fooName[] = "string_contains";
+  errno = 0;
+
+  // Argument Validity Check
+  if (string == (String *)NULL) {
+    fprintf(stderr, "argument 'string' of %s must point to a valid string\n",
+            fooName);
+    errno = EPERM;
+    return false;
+  }
+
+  // Contains
+  bool result = false;
+  for (size_t listIdx = 0; listIdx < string->length; ++listIdx) {
+    if (string->data[listIdx] == element) {
+      result = true;
+      break;
+    }
+  }
+  return result;
+}
+
+OptionalString string_strip(const String *const string,
+                            const String *const delimeters) {
+  const char fooName[] = "string_strip";
+  String stripped = string_constructEmpty();
+  OptionalString result = {.data = stripped, .valid = false};
+
+  // Argument Validity Checks
+  errno = 0;
+  if (string == (String *)NULL) {
+    fprintf(stderr, "argument 'string' of %s must point to a valid string\n",
+            fooName);
+    errno = EPERM;
+    return result;
+  }
+  if (delimeters == (String *)NULL) {
+    fprintf(stderr,
+            "argument 'delimeters' of %s must point to a valid string\n",
+            fooName);
+    errno = EPERM;
+    return result;
+  }
+
+  // Strip
+  // create iterators on string
+  const char *start = string->data;
+  const char *last = string->data + string->length - 1;
+  // strip from string
+  while (start <= last) {
+    bool moved = false;
+    if (string_contains(delimeters, *start)) {
+      ++start;
+      moved = true;
+    }
+    if (string_contains(delimeters, *last)) {
+      --last;
+      moved = true;
+    }
+    if (!moved) {
+      break;
+    }
+  }
+  // allocate stripped string
+  stripped.length = start <= last ? 1 + last - start : 0;
+  stripped.capacity = 2 * stripped.length + 1;
+  const void *const strippedBuffer = malloc(stripped.capacity);
+  if (strippedBuffer == (void *)NULL) {
+    return result; // errno set by malloc
+  }
+  stripped.data = (char *)strippedBuffer;
+
+  // copy contents to new string
+  memcpy(stripped.data, start, stripped.length);
+  *(stripped.data + stripped.length) = '\0';
+
+  result.data = stripped;
+  result.valid = true;
+  return result;
+}
+/**
+ * @file vector.c
+ * @author Justen Di Ruscio - (3624673)
+ * @brief Provides definitions for basic utilities to operate on arbitrary
+ * length, geometrically resized arrays (Vectors)
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include "vector_private.h"
+#include <jd/error.h>
+#include <jd/string.h>
+#include <jd/vector.h>
+
+#include <stdio.h>  // fprintf
+#include <stdlib.h> // malloc, realloc
+#include <string.h> // memcpy
+
+Vector vector_constructEmpty(const size_t dataSize) {
+  Vector vec = {.data = NULL,
+                .length = 0,
+                .capacity = 0,
+                .elementDeleter = NULL,
+                .dataSize = dataSize};
+  return vec;
+}
+
+OptionalVector vector_constructCapacity(const size_t capacity,
+                                        const size_t dataSize) {
+  const char fooName[] = "vector_constructCapacity";
+  Vector vec = {.data = (void *)NULL,
+                .length = 0,
+                .capacity = capacity,
+                .dataSize = dataSize};
+  OptionalVector result = {.data = vec, .valid = false};
+
+  // Argument Validity Checks
+  errno = 0;
+  if (dataSize == 0) {
+    fprintf(stderr, "field 'dataSize' of %s must be greater than 0\n", fooName);
+    errno = EPERM;
+    return result;
+  }
+  if (capacity == 0) {
+    result.data = vec;
+    fprintf(stderr, "field 'capacity' of %s must be greather than 0\n",
+            fooName);
+    errno = EPERM;
+    return result;
+  }
+
+  // Construction
+  void *const newVectorBuff = malloc(capacity * dataSize);
+  if (newVectorBuff == (void *)NULL) {
+    fprintf(stderr,
+            "failure allocating memory for vector contents in "
+            "%s\n",
+            fooName);
+    return result; // errno set by malloc
+  }
+  vec.data = newVectorBuff;
+  result.valid = true;
+  result.data = vec;
+  return result;
+}
+
+OptionalVector vector_copyConstruct(const Vector *const other) {
+  const char fooName[] = "vector_copyConstruct";
+  Vector vec = {.data = (void *)NULL,
+                .length = other->length,
+                .capacity = other->capacity,
+                .dataSize = other->dataSize};
+  OptionalVector result = {.data = vec, .valid = false};
+
+  // Argument Validity Check
+  errno = 0;
+  if (other == (Vector *)NULL) {
+    fprintf(stderr,
+            "field 'other' of %s must point to a valid "
+            "address\n",
+            fooName);
+    errno = EPERM;
+    return result;
+  }
+
+  // Copy Construct
+  void *const newVectorBuff = malloc(vec.capacity * vec.dataSize);
+  if (newVectorBuff == (void *)NULL) {
+    fprintf(stderr,
+            "failure allocating memory for vector contents in "
+            "%s\n",
+            fooName);
+    return result; // errno set by malloc
+  }
+  vec.data = newVectorBuff;
+  memcpy(vec.data, other->data, vec.length * vec.dataSize);
+
+  result.valid = true;
+  result.data = vec;
+  return result;
+}
+
+void vector_freeData(const Vector *const vec) {
+  // Return if there's nothing to free
+  if (vec == (Vector *)NULL) {
+    return;
+  }
+  // Free data member
+  free(vec->data);
+}
+
+void vector_freeDataVoid(const void *const vec) {
+  // Return if there's nothing to free
+  if (vec == (void *)NULL) {
+    return;
+  }
+  // Free data member
+  Vector *v = (Vector *)vec;
+  vector_freeData(v);
+}
+
+void vector_freeElements(const Vector *const vec) {
+  // Return if there's nothing to free
+  if (vec == (Vector *)NULL || vec->data == (void *)NULL) {
+    return;
+  }
+
+  for (size_t elementIdx = 0; elementIdx < vec->length; ++elementIdx) {
+    const void *const element = vector_at(vec, elementIdx);
+    vec->elementDeleter(element);
+  }
+}
+
+void *vector_at(const Vector *const vec, const size_t index) {
+  const char fooName[] = "vector_at";
+
+  // Argument Validity Check
+  errno = 0;
+  if (vec == (Vector *)NULL) {
+    fprintf(stderr, "field 'vec' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+    return (void *)NULL;
+  }
+  if (vec->length <= index) {
+    fprintf(stderr,
+            "field 'index' of value %zu in %s is out of bounds of provided "
+            "vector of length %zu\n",
+            index, fooName, vec->length);
+    errno = ENOENT;
+    return (void *)NULL;
+  }
+  // Element Access
+  const char *const dataBytes = (char *)vec->data;
+  return (void *)(dataBytes + index * vec->dataSize);
+}
+
+void *vector_back(const Vector *const vec) {
+  const char fooName[] = "vector_back";
+
+  // Argument Validity Check
+  errno = 0;
+  if (vec == (Vector *)NULL) {
+    fprintf(stderr, "field 'vec' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+    return (void *)NULL;
+  }
+
+  // Element Access
+  if (vec->length == 0) {
+    errno = EPERM;
+    return (void *)NULL;
+  }
+  return vector_at(vec, vec->length - 1);
+}
+
+bool vector_pushBack(Vector *const vec, const void *const element) {
+  const char fooName[] = "vector_pushBack";
+
+  // Argument Validity Checks
+  errno = 0;
+  if (vec == (Vector *)NULL) {
+    fprintf(stderr, "field 'vec' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+    return false;
+  }
+  if (element == (void *)NULL) {
+    fprintf(stderr, "field 'element' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+    return false;
+  }
+
+  // Push Back
+  const size_t oldLength = vec->length;
+  const bool reserved = vector_reserve(vec, ++vec->length);
+  return reserved && vector_assignElement(vec, oldLength, element);
+}
+
+bool vector_pushBackAll(Vector *const vec, const size_t numElements,
+                        const void *const source) {
+  const char fooName[] = "vector_pushBackAll";
+
+  // Argument Validity Checks
+  errno = 0;
+  if (vec == (Vector *)NULL) {
+    fprintf(stderr, "field 'vec' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+    return false;
+  }
+  if (source == (void *)NULL) {
+    fprintf(stderr, "field 'source' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+    return false;
+  }
+
+  // Push Back
+  const size_t oldLength = vec->length;
+  vec->length += numElements;
+  const bool reserved = vector_reserve(vec, vec->length);
+  return reserved && vector_assignElements(vec, oldLength, numElements, source);
+}
+
+OptionalVector vector_append(const Vector *const vec1,
+                             const Vector *const vec2) {
+  const char fooName[] = "vector_append";
+  OptionalVector result = {.data = vector_constructEmpty(0), .valid = false};
+
+  // Argument Validity Checks
+  errno = 0;
+  if (vec1 == (Vector *)NULL) {
+    fprintf(stderr, "argument 'vec1' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+    return result;
+  }
+  if (vec2 == (Vector *)NULL) {
+    fprintf(stderr, "argument 'vec2' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+    return result;
+  }
+  if (vec1->dataSize != vec2->dataSize) {
+    fprintf(stderr,
+            "vectors provided to %s must contain elements of equal size\n",
+            fooName);
+    errno = EPERM;
+    return result;
+  }
+
+  // Append Vectors
+  Vector both = vector_constructEmpty(vec1->dataSize);
+  const bool reserved = vector_reserve(&both, vec1->length + vec2->length);
+  if (!reserved) {
+    fprintf(stderr, "Failed to reserve vector of %zu elements in %s\n",
+            vec1->length + vec2->length, fooName);
+    return result; // errno set by vector_reserve
+  }
+
+  bool assigned;
+  if (vec1->data != NULL) {
+    both.length += vec1->length;
+    assigned = vector_assignElements(&both, 0, vec1->length, vec1->data);
+    if (!assigned) {
+      fprintf(stderr, "Failed to assign elements of vec1 in %s\n", fooName);
+      return result; // errno set by vector_assignElements
+    }
+  }
+  if (vec2->data != NULL && vec2->length > 0) {
+    both.length += vec2->length;
+    assigned =
+        vector_assignElements(&both, vec1->length, vec2->length, vec2->data);
+    if (!assigned) {
+      fprintf(stderr, "Failed to assign elements of vec2 in %s\n", fooName);
+      return result; // errno set by vector_assignElements
+    }
+  }
+
+  result.data = both;
+  result.valid = true;
+  return result;
+}
+
+bool vector_reserve(Vector *const vec, const size_t newSize) {
+  const char fooName[] = "vector_reserve";
+
+  // Argument Validity Check
+  errno = 0;
+  if (vec == (Vector *)NULL) {
+    fprintf(stderr, "field 'vec' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+    return false;
+  }
+
+  // Reserve
+  if (newSize > vec->capacity) { // require resize
+    const size_t newCapacity = 2 * newSize;
+    void *newVectorBuffer = realloc(vec->data, newCapacity * vec->dataSize);
+    if (newVectorBuffer == (void *)NULL) { // realloc failed
+      fprintf(stderr, "resizing vector buffer with realloc failed in %s\n",
+              fooName);
+      return false; // realloc sets errno
+    }
+    vec->data = newVectorBuffer;
+    vec->capacity = newCapacity;
+  }
+  return true;
+}
+
+bool vector_clear(Vector *const vec) {
+  const char fooName[] = "vector_clear";
+
+  // Argument Validity Check
+  errno = 0;
+  if (vec == (Vector *)NULL) {
+    fprintf(stderr, "field 'vec' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+    return false;
+  }
+
+  // Clear Contents
+  vec->length = 0;
+  return true;
+}
+
+bool vector_assignElement(Vector *const vec, const size_t destination,
+                          const void *source) {
+  const char fooName[] = "vector_assignElement";
+
+  // Argument Validity Checks
+  errno = 0;
+  if (vec == (Vector *)NULL) {
+    fprintf(stderr, "field 'vec' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+    return false;
+  }
+  if (source == (void *)NULL) {
+    fprintf(stderr,
+            "field 'source' of %s must point to a "
+            "valid address\n",
+            fooName);
+    errno = EPERM;
+    return false;
+  }
+  // check for overlaping data
+  void *const destinationLocation = vector_at(vec, destination);
+  if (errno != 0) {
+    fprintf(stderr, "call to vector_at in %s failed. errno = %i: %s\n", fooName,
+            errno, strerror(errno));
+    return false;
+  }
+  if (memoryOverlaps(source, destinationLocation, vec->dataSize)) {
+    fprintf(stderr,
+            "data referenced by fields 'destination' and 'source' of "
+            "%s must not overlap\n",
+            fooName);
+    return false;
+  }
+
+  // Assign Element
+  return vector_assignElements(vec, destination, 1, source);
+}
+
+bool vector_assign(Vector *const destination, const Vector *const source) {
+  const char fooName[] = "vector_assign";
+
+  // Argument Validity Checks
+  errno = 0;
+  if (destination == (Vector *)NULL) {
+    fprintf(stderr, "field 'destination' of %s must point to a valid vector\n",
+            fooName);
+    errno = EPERM;
+    return false;
+  }
+  if (source == (Vector *)NULL) {
+    fprintf(stderr, "field 'source' of %s must point to a valid vector\n",
+            fooName);
+    errno = EPERM;
+    return false;
+  }
+
+  // Assignment
+  destination->length = source->length;
+  const bool reserved = vector_reserve(destination, source->length);
+  if (!reserved) {
+    fprintf(stderr, "Unable to reserve memory for destination in %s\n",
+            fooName);
+    return false; // vector_reserve sets errno
+  }
+  const bool assigned =
+      vector_assignElements(destination, 0, source->length, source->data);
+  if (!assigned) {
+    fprintf(stderr, "Failure assigning contents in %s\n", fooName);
+    return false;
+  }
+
+  return true;
+}
+
+static bool vector_assignElements(Vector *const vec, const size_t destination,
+                                  const size_t numElements,
+                                  const void *source) {
+  const char fooName[] = "vector_assignElements";
+
+  // Argument Validity Checks
+  if (vec == (Vector *)NULL) {
+    fprintf(stderr, "field 'vec' of %s must point to a valid address\n",
+            fooName);
+    return false;
+  }
+  if (source == (void *)NULL) {
+    fprintf(stderr,
+            "field 'source' of %s must point to a "
+            "valid address\n",
+            fooName);
+    return false;
+  }
+  // check for overlaping data
+  const size_t numBytes = vec->dataSize * numElements;
+  void *const destinationLocation = vector_at(vec, destination);
+  if (errno != 0) {
+    fprintf(stderr, "call to vector_at in %s failed\n", fooName);
+    handleErrorMsg(errno);
+    return false;
+  }
+  if (memoryOverlaps(source, destinationLocation, numBytes)) {
+    fprintf(stderr,
+            "data referenced by fields 'destination' and 'source' of "
+            "%s must not overlap\n",
+            fooName);
+    return false;
+  }
+
+  // Data Assignment
+  memcpy(destinationLocation, source, numBytes);
+  return true;
+}
+
+bool vector_erase(Vector *const vec, const size_t index) {
+  const char fooName[] = "vector_erase";
+
+  // Argument Validity Checks
+  errno = 0;
+  if (vec == (Vector *)NULL) {
+    fprintf(stderr, "field 'vec' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+    return false;
+  }
+  if (index >= vec->length) {
+    fprintf(stderr,
+            "field 'index' of %s is out of bounds of the provided vector\n",
+            fooName);
+    errno = ERANGE;
+  }
+
+  // Erase Element
+  // create new vector to store elements
+  OptionalVector newOpt =
+      vector_constructCapacity(vec->capacity, vec->dataSize);
+  if (!newOpt.valid) {
+    fprintf(stderr,
+            "Unable to construct vector in %s to store retained elements\n",
+            fooName);
+  }
+  Vector newVec = newOpt.data;
+  newVec.length = vec->length;
+
+  // copy elements up to erasure
+  bool assigned = vector_assignElements(&newVec, 0, index, vec->data);
+  if (!assigned) {
+    fprintf(stderr, "Failure copying first elements in %s\n", fooName);
+    return false; // errno set by vector_assignElements
+  }
+
+  // copy elements after erasure
+  if (vec->length > index + 1) {
+    void *source = vector_at(vec, index + 1);
+    assigned =
+        vector_assignElements(&newVec, index, vec->length - index - 1, source);
+    if (!assigned) {
+      fprintf(stderr, "Failure copying last elements in %s\n", fooName);
+      return false; // errno set by vector_assignElements
+    }
+  }
+
+  // free old contents
+  vector_freeData(vec);
+
+  --newVec.length;
+  *vec = newVec;
+  return true;
+}
+
+ssize_t vector_find(const Vector *const vec, const void *const value) {
+  const char fooName[] = "vector_find";
+  ssize_t foundIndex = -1;
+
+  // Argument Validity Checks
+  errno = 0;
+  if (vec == (Vector *)NULL) {
+    fprintf(stderr, "argument 'vec' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+    return foundIndex;
+  }
+  if (value == (void *)NULL) {
+    fprintf(stderr, "argument 'value' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+    return foundIndex;
+  }
+
+  // Find element
+  for (unsigned i = 0; i < vec->length; ++i) {
+    const void *const vecElem = vector_at(vec, i);
+    if (memcmp(vecElem, value, vec->dataSize) == 0) {
+      foundIndex = i;
+      break;
+    }
+  }
+  return foundIndex;
+}
+#pragma once
+/**
+ * @file error.h
+ * @author Justen Di Ruscio (3624673)
+ * @brief Contains symbols for common error handling/checking functions
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <errno.h>
+#include <stdbool.h>
+
+#define ECMDNOTFOUND 127
+
+/**
+ * @brief Prints error number and associated Unix error message, from strerror,
+ * or a message indicating errorNumber is unknown to strerror
+ *
+ * @param errorNumber Unix error number
+ */
+void handleErrorMsg(const int errorNumber);
+
+/**
+ * @brief exits the program with provided error number after printing error
+ * number and associated Unix error message, from strerror, or a message
+ * indicating errorNumber is unknown to strerror
+ *
+ * @param errorNumber Unix error number
+ */
+void handleExitError(const int errorNumber);
+
+/**
+ * @brief Indicates whether the memory pointed to by first and second overlap or
+ * not. Assumes pointed to data is of equal length.
+ *
+ * @param first pointer to first chunk of memory
+ * @param second pointer to second chunk of memory
+ * @param dataSize size, in bytes, of both chunks of memory
+ * @return true memory overlaps
+ * @return false memory doesn't overlap
+ */
+bool memoryOverlaps(const void* const first, const void* const second,
+                    const unsigned dataSize);
+#pragma once
+/**
+ * @file list.h
+ * @author Justen Di Ruscio (3624673)
+ * @brief  Incomplete and unused. Symbols for linked list
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <stdbool.h>  // bool, true, false
+#include <stddef.h>   // size_t
+
+typedef struct ListNode {
+  void *data;
+  struct ListNode *next;
+} ListNode;
+
+typedef struct List {
+  ListNode *head;
+  ListNode *tail;
+  size_t length;
+  size_t dataSize;
+} List;
+
+typedef struct ListNodePair {
+  ListNode *first;
+  ListNode *second;
+} ListNodePair;
+
+List list_construct(const size_t dataSize);
+List list_copyConstruct(const List *const other);
+void list_freeNodes(List *const list);
+void list_freeNodesAndElements(List *const list);
+
+ListNode *list_nodeAt(const size_t index);
+void *list_elementAt(const size_t index);
+
+bool list_pushFront(List *const list, const void *const element);
+bool list_pushBack(List *const list, const void *const element);
+bool list_pushAt(List *const list, const size_t index,
+                 const void *const element);
+#pragma once
+/**
+ * @file string.h
+ * @author Justen Di Ruscio (3624673)
+ * @brief Symbols for arbitrary length, null terminated strings and their
+ * manipulation. These Strings are not small-string-optimized.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <jd/error.h>
+#include <jd/vector.h>
+#include <string.h>
+
+/**
+ * @brief Representation of a string
+ *
+ */
+typedef struct String {
+  char* data;
+  size_t length;    // in bytes
+  size_t capacity;  // memory including null termination
+} String;
+
+/**
+ * @brief Contains a string and a flag to indicate its validity. Used to return
+ * a string and possibly an error from functions.
+ *
+ */
+typedef struct OptionalString {
+  String data;
+  bool valid;
+} OptionalString;
+
+/**
+ * @brief Constructs and empty string by initializing the String struct
+ *
+ * @return String constructed, empty String
+ */
+String string_constructEmpty();
+
+/**
+ * @brief Constructs a String with an initial capacity. Sets errno upon error.
+ *
+ * @param capacity number of chars to reserve in String's initial capacity
+ * @return OptionalString constructed String and flag to indicate validity of
+ * the String
+ */
+OptionalString string_constructCapacity(const size_t capacity);
+
+/**
+ * @brief Constructs a String whose contents are copied from the other String.
+ * Sets errno upon error.
+ *
+ * @param other String to copy contents of
+ * @return OptionalString constructed string and flag to indicate validity of
+ * the String
+ */
+OptionalString string_copyConstruct(const String* const other);
+
+/**
+ * @brief Constructs a String whose contents are copied from the null terminated
+ * bytes pointed to by other. Sets errno upon error.
+ *
+ * @param other c-style string (null-terminated array) to copy contents of
+ * @return OptionalString constructed string and flag to indicate validity of
+ * the String
+ */
+OptionalString string_copyConstructChar(const char* const other);
+
+/**
+ * @brief Frees the contents of the provided String. Does nothing if the
+ * provided String or its contents is NULL.
+ *
+ * @param str String to free contents of
+ */
+void string_freeData(const String* const str);
+
+/**
+ * @brief Calls string_freeData after casting str to a String. Provides a
+ * uniform interface for freeing String data.
+ *
+ * @param str String to free contents of
+ */
+void string_freeDataVoid(const void* const str);
+
+/**
+ * @brief Reserves enough memory in str to contain newCapacity chars. Does
+ * nothing if str is already large enough. Sets errno upon error.
+ *
+ * @param newCapacity number of chars str's buffer should hold after reserve
+ * @return true successfully reserved memory
+ * @return false failed to reserve memory
+ */
+bool string_reserve(String* const str, const size_t newCapacity);
+
+/**
+ * @brief Splits the provided string by any of the delimeters pointed to by
+ * delim into a Vector of Strings. Resulting Strings own their memory; they
+ * don't point to contents of str. Sets errno upon error.
+ *
+ * @param str String to split
+ * @param delim null-terminated list of chars used as delimeters to split str
+ * @return OptionalVector Vector of split Strings and a flag do indicate the
+ * validity of the operations.
+ */
+OptionalVector string_split(const String* const str, const char* const delim);
+
+/**
+ * @brief Compares contents of two strings with strcmp
+ *
+ * @param first String
+ * @param second String
+ * @return int result of strcmp
+ */
+int string_compare(const String* const first, const String* const second);
+
+/**
+ * @brief Compares contents of first String with null-terminated c-style
+ * string, second using strcmp.
+ *
+ * @param first String
+ * @param second null-terminated c-style string
+ * @return int result of strcmp
+ */
+int string_compareChar(const String* const first, const char* const second);
+
+/**
+ * @brief Indicates if the provided String's contents contains the provided
+ * char. Sets errno upon error.
+ *
+ * @param string String to find char in
+ * @param element char to find in string
+ * @return true element is present in string
+ * @return false element is not present in string
+ */
+bool string_contains(const String* const string, const char element);
+
+/**
+ * @brief Strips any of the chars in delimeters from the start and end of
+ * string. Leaves string unmodified. Sets errno upon error
+ *
+ * @param string String to strip characters from
+ * @param delimeters String containing chars to strip from string
+ * @return OptionalString stripped string and flag to indicate the validity of
+ * the operations.
+ */
+OptionalString string_strip(const String* const string,
+                            const String* const delimeters);
+#pragma once
+/**
+ * @file vector.h
+ * @author Justen Di Ruscio - (3624673)
+ * @brief Provides symbols for basic utilities to operate on arbitrary length,
+ * geometrically resized arrays (Vectors)
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <stdbool.h>    // bool, true, false
+#include <stddef.h>     // size_t
+#include <sys/types.h>  // ssize_t
+
+/**
+ * @brief Represents a vector
+ *
+ */
+typedef struct Vector {
+  void* data;
+  size_t length;    // num. elements
+  size_t capacity;  // num. possible elements
+  size_t dataSize;  // size of each element (bytes)
+  void (*elementDeleter)(
+      const void* const element);  // function to free element
+} Vector;
+
+/**
+ * @brief Used to return a vector and a flag representing if the vector is valid
+ * from functions that return a vector and a possible error.
+ *
+ */
+typedef struct OptionalVector {
+  Vector data;
+  bool valid;
+} OptionalVector;
+
+/**
+ * @brief Creates a completely empty vector by initializing the Vector struct
+ *
+ * @param dataSize size of elements contained by the vector to construct
+ * @return Vector constructed, empty Vector
+ */
+Vector vector_constructEmpty(const size_t dataSize);
+
+/**
+ * @brief Creates a vector with an initial capacity, allocated on the heap. Sets
+ * errno if result is invalid
+ *
+ * @param capacity amount of memory to initially allocate in number of elements
+ * @param dataSize size of elements contained by the vector to construct
+ * @return OptionalVector contains the constructed vector and a flag to indicate
+ * its validity
+ */
+OptionalVector vector_constructCapacity(const size_t capacity,
+                                        const size_t dataSize);
+
+/**
+ * @brief Creates a new vector with contents allocated on the heap and with the
+ * same elements as other. Sets errno if result is invalid
+ *
+ * @param other another vector to copy elements from. Left unmodified
+ * @return OptionalVector contains the constructed vector and a flag to indicate
+ * its validity
+ */
+OptionalVector vector_copyConstruct(const Vector* const other);
+
+/**
+ * @brief Frees the contents of the provided vector. Returns NULL and performs
+ * no action if vec is NULL or vec->data is NULL
+ *
+ * @param vec Vector who's contents were allocated on the heap
+ */
+void vector_freeData(const Vector* const vec);
+
+/**
+ * @brief Calls vector_freeData after casting vec to a Vector*. Used to provide
+ * a generic interface.
+ *
+ * @param vec a pointer pointing to a Vector
+ */
+void vector_freeDataVoid(const void* const vec);
+
+/**
+ * @brief Applies vector->elementDeleter to each element in the Vector's data
+ * contents. Used if the elements are/contain heap allocated data
+ *
+ * @param vec Vector to free elements of
+ */
+void vector_freeElements(const Vector* const vec);
+
+/**
+ * @brief Returns a pointer to the element at index or NULL if an error
+ * occurred. errno set upon error, like under an out of bounds condition
+ *
+ * @param vec Vector to access element of
+ * @param index index of element in vec to access
+ * @return void* pointer to contained element
+ */
+void* vector_at(const Vector* const vec, const size_t index);
+
+/**
+ * @brief Accesses the last element of vec by calling vector_at. Sets errno on
+ * error and returns NULL, like if the vector is empty.
+ *
+ * @param vec Vector to access last element of
+ * @return void*
+ */
+void* vector_back(const Vector* const vec);
+
+/**
+ * @brief Assigns the value of the vec's element at index destination to the
+ * value pointed to by source. Copies dereferenced data, not source itself. Sets
+ * errno upon error and returns false to indicate error.
+ *
+ * @param vec Vector to assign element of
+ * @param destination index of element in vec to assign
+ * @param source pointer to data to assign to element at destination
+ * @return true successfully assigned element
+ * @return false failed to assign element
+ */
+bool vector_assignElement(Vector* const vec, const size_t destination,
+                          const void* source);
+
+/**
+ * @brief Copy assigns contents of vector source to destination. Sets errno upon
+ * error and reserves memory in destination if its capacity is too small
+ *
+ * @param destination Vector with contents to copy
+ * @param source Vector who's contents will be assigned
+ * @return true successfully assigned contents
+ * @return false failed to assign contents
+ */
+bool vector_assign(Vector* const destination, const Vector* const source);
+
+/**
+ * @brief Adds another element to the end of vec with the contents pointed to by
+ * element. Sets errno upon error.
+ *
+ * @param vec Vector to extend
+ * @param element pointer to data to copy into added element
+ * @return true successfully pushed new element onto vec
+ * @return false failed to push new element onto vec
+ */
+bool vector_pushBack(Vector* const vec, const void* const element);
+
+/**
+ * @brief Adds all the contiguous elements pointed to by elements as new
+ * elements on the end of vec. Sets errno upon error.
+ *
+ * @param vec Vector to extend
+ * @param numElements number of elements pointed to by elements and to extend
+ * vec by
+ * @param elements contiguous array of elements to copy to vec
+ * @return true successfully pushed new elements onto vec
+ * @return false failed to push new elements onto vec
+ */
+bool vector_pushBackAll(Vector* const vec, const size_t numElements,
+                        const void* const elements);
+
+/**
+ * @brief Constructs a new vector whose contents is a concatenation of the
+ * contents of vec1 and vec2. Sets errno on error. Appends nothing if either
+ * provided vector has no data contents.
+ *
+ * @param vec1 first Vector
+ * @param vec2 second Vector, appended to vec1
+ * @return OptionalVector contains concatenated vector and flag to indicate
+ * validity of result.
+ */
+OptionalVector vector_append(const Vector* const vec1,
+                             const Vector* const vec2);
+
+/**
+ * @brief Reserves enough capacity in vec to contain newSize number of elements.
+ * Does nothing if vec is already large enough. Sets errno upon error.
+ *
+ * @param vec Vector upon which data is reserved
+ * @param newSize number of elements vec should hold after reservation
+ * @return true successfully reserved memory
+ * @return false failed to reserve memory
+ */
+bool vector_reserve(Vector* const vec, const size_t newSize);
+
+/**
+ * @brief Clears contents of provided vector. Doesn't free any memory, only
+ * resizes it to 0. Sets errno upon error.
+ *
+ * @param vec Vector to clear
+ * @return true successfully cleared vector
+ * @return false failed to clear provided vector
+ */
+bool vector_clear(Vector* const vec);
+
+/**
+ * @brief Erases the element of vec at index by copying other elements to a new
+ * Vector. Frees original array but doesn't free elements if they are heap
+ * allocated. Sets errno upon error.
+ *
+ * @param vec Vector to erase element of
+ * @param index index of element in vec to erase
+ * @return true successfully erased element
+ * @return false failed to erase element
+ */
+bool vector_erase(Vector* const vec, const size_t index);
+
+/**
+ * @brief Returns index of element in vec with same data as that pointed to by
+ * value. Compares dereferenced data, not addresses. Returns -1 upon failure or
+ * error, where errno is set upon error.
+ *
+ * @param vec Vector to find element in
+ * @param value value of element to find
+ * @return ssize_t index of found element or -1 upon failure
+ */
+ssize_t vector_find(const Vector* const vec, const void* const value);
+#pragma once
+/**
+ * @file list_private.h
+ * @author Justen Di Ruscio (3624673)
+ * @brief Unused and incomplete. Contains symbols for linked list functions that
+ * aren't necessary as part of the public interface.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <jd/list.h>
+
+ListNode *list_newNode(const size_t dataSize, const void *const element);
+ListNodePair list_newNodes(const size_t numNodes, const size_t dataSize,
+                           const void *const elements);
+#pragma once
+/**
+ * @file vector_private.h
+ * @author Justen Di Ruscio (3624673)
+ * @brief Contains symbols for functions pertaining to Vectors which aren't
+ * necessary as part of their public interface.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <jd/vector.h>
+
+/**
+ * @brief Assigns the value of numElements elements in vec starting at
+ * destination to the values of the contiguous elements pointed to by source.
+ * Assigns errno upon error.
+ *
+ * @param vec Vector to assign elements in
+ * @param destination index of first element to assign in vec
+ * @param numElements number of elements pointed to by source and to assign.
+ * @param source contiguous elements whose contents will be copied into elements
+ * of vec
+ * @return true successfully assigned elements
+ * @return false failed to assign elements
+ */
+static bool vector_assignElements(Vector* const vec, const size_t destination,
+                                  const size_t numElements, const void* source);
+/**
+ * @file commands.c
+ * @author Justen Di Ruscio (3624673)
+ * @brief Definitions related to executing and parsing commands with
+ * myshell.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <myshell/commands/commands.h>
+
+#include <stdio.h>
+#include <unistd.h>
+
+#include <myshell/commands/internal/bg.h>
+#include <myshell/commands/internal/cd.h>
+#include <myshell/commands/internal/exit.h>
+#include <myshell/commands/internal/fg.h>
+
+const char *availableCommandNames[] = {CD_COMMAND_NAME, EXIT_COMMAND_NAME,
+                                       FG_COMMAND_NAME, BG_COMMAND_NAME};
+const unsigned numAvailableCommands =
+    sizeof(availableCommandNames) / sizeof(*availableCommandNames);
+
+/**
+ * @brief Array of function pointers to functions handling each system command.
+ *
+ */
+int (*commandExecutors[])(const char *, const Vector *) = {
+    executeCd, executeExit, executeFg, executeBg};
+
+enum CommandName parseCommandName(const String *const commandName) {
+  const char fooName[] = "parseCommandName";
+  errno = 0;
+
+  // Argument Validity Check
+  if (commandName == (String *)NULL || commandName->data == (char *)NULL) {
+    fprintf(stderr, "field 'commandName' of %s must point to a valid string\n",
+            fooName);
+    errno = EPERM;
+    return Unknown;
+  }
+
+  // Parse Name
+  for (unsigned cmdIdx = 1; cmdIdx <= numAvailableCommands; ++cmdIdx) {
+    if (!string_compareChar(commandName, availableCommandNames[cmdIdx - 1])) {
+      return (enum CommandName)(cmdIdx);
+    }
+  }
+  return Unknown;
+}
+
+int execInternal(const enum CommandName name, const Vector *const commandArgs) {
+  const char fooName[] = "execInternal";
+  errno = 0;
+
+  // Argument Validity Checks
+  if (name == Unknown) {
+    fprintf(stderr, "cannot execute unknown internal command\n");
+    errno = EPERM;
+    return errno;
+  }
+  if (commandArgs == (Vector *)NULL) {
+    fprintf(stderr,
+            "argument 'commandArgs' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+    return errno;
+  }
+
+  // Execute Internal Command
+  // command name as string for error reporting
+  const char *const commandName = availableCommandNames[name - 1];
+  // executor for selected command
+  int (*commandExecutor)(const char *, const Vector *);
+  commandExecutor = commandExecutors[name - 1];
+  // run selected command through executor
+  return commandExecutor(commandName, commandArgs);
+}
+
+int execSystem(const Vector *const cmdArgs) {
+  const char fooName[] = "execSystem";
+
+  // Argument Validity Check
+  errno = 0;
+  if (cmdArgs == (Vector *)NULL) {
+    fprintf(stderr, "argument 'cmdArgs' of %s must point to a valid addrss\n",
+            fooName);
+    errno = EPERM;
+    return errno;
+  }
+
+  // Exec system command
+  // construct contiguous array of char*s - argv
+  char *argv[cmdArgs->length + 1];
+  argv[cmdArgs->length] = (char *)NULL;
+  for (size_t cmdIdx = 0; cmdIdx < cmdArgs->length; ++cmdIdx) {
+    const String *const arg = (String *)vector_at(cmdArgs, cmdIdx);
+    argv[cmdIdx] = arg->data;
+  }
+  // system call
+  execvp(argv[0], argv);
+  return errno;
+}
+/**
+ * @file argument_validity.c
+ * @author Justen Di Ruscio (3624673)
+ * @brief Contains definitions for functions related to argument validity checks
+ * for internal commands. All internal commands have the same interface - this
+ * allows the same argument validity checks among all executor functions.
+ * @version 0.1
+ * @date 2021-02-17
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include "argument_validity.h"
+
+#include <errno.h>
+#include <stdio.h>
+
+int argumentValidityCheck(const char *const commandName,
+                          const Vector *const commandArgs,
+                          const char *const fooName) {
+  errno = 0;
+  if (fooName == (char *)NULL) {
+    fprintf(stderr, "argument 'fooName' of argumentValidityCheck must point to "
+                    "a valid address\n");
+  } else if (commandName == (char *)NULL) {
+    fprintf(stderr,
+            "argument 'commandName' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+  } else if (commandArgs == (Vector *)NULL) {
+    fprintf(stderr,
+            "argument 'commandArgs' of %s must point to a valid address\n",
+            fooName);
+    errno = EPERM;
+  }
+  return errno;
+}
+/**
+ * @file bg.c
+ * @author Justen Di Ruscio (3624673)
+ * @brief Contents related to the handling of the internal command to background
+ * processes.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#define _POSIX_C_SOURCE 200809L
+
+#include <myshell/commands/internal/bg.h>
+
+#include <signal.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include "argument_validity.h"
+#include <jd/error.h>
+#include <jd/string.h>
+#include <jd/vector.h>
+#include <myshell/job_states.h>
+
+static char *helpMessage() {
+  return "bg - send jobs to background; resuming them if they are suspended\n"
+         "If no job PID is specified, all foreground processes are sent to\n"
+         "background\n"
+         "bg [PID...]\n";
+}
+
+/**
+ * @brief Sends process with PID pid to background. Sets errno upon error.
+ *
+ * @param pid process ID to background
+ * @return int errno
+ */
+static int bgChild(const pid_t pid) {
+  const char fooName[] = "bgChild";
+
+  // Add child PID to list of background jobs
+  const bool pushed = vector_pushBack(&bgPids, &pid);
+  if (!pushed) {
+    fprintf(stderr, "Failed to add pid %i to list of background jobs in %s\n",
+            pid, fooName);
+    return errno;
+  }
+
+  // Send signal to job with specified PID
+  const bool sent = !kill(pid, SIGCONT);
+  if (!sent) {
+    fprintf(stderr,
+            "Failed to send SIGCONT (%i) signal to child with PID %i in %s\n",
+            SIGCONT, pid, fooName);
+    return errno;
+  }
+
+  return 0;
+}
+
+int executeBg(const char *const commandName, const Vector *const commandArgs) {
+  const char fooName[] = "executeBg";
+  Vector childPids = vector_constructEmpty(sizeof(pid_t));
+  int err = argumentValidityCheck(commandName, commandArgs, fooName);
+  if (err != 0) {
+    return err; // errno set by argumentValidityCheck
+  }
+
+  // Parse provided arguments for job PID
+  // provided PID arguments -> parse PIDs
+  if (commandArgs->length >= 2) {
+    for (unsigned pidIdx = 1; pidIdx < commandArgs->length; ++pidIdx) {
+      // convert PID arg to int
+      const String *pidStr = (String *)vector_at(commandArgs, pidIdx);
+      const int pid = strtol(pidStr->data, NULL, 10);
+      if (errno != 0) {
+        fprintf(stderr, "Failure converting provided PID %s to integer in %s\n",
+                pidStr->data, fooName);
+        return errno; // errno set by strtol
+      }
+      // find PID arg in suspended PIDs
+      ssize_t suspendedIdx = vector_find(&suspendedPids, &pid);
+      if (suspendedIdx == -1) {
+        fprintf(stderr, "PID %i is not a suspended subprocess in %s\n", pid,
+                fooName);
+        return ENOENT;
+      }
+      // add PID arg to processes to background
+      const bool pushed = vector_pushBack(&childPids, &pid);
+      if (!pushed) {
+        fprintf(stderr,
+                "Failure adding pid %i to list of pids to background in %s\n",
+                pid, fooName);
+        vector_freeData(&childPids);
+        return errno; // errno set by vector_pushBack
+      }
+      // remove PID from list of suspended PIDs
+      const bool erased = vector_erase(&suspendedPids, suspendedIdx);
+      if (!erased) {
+        fprintf(stderr,
+                "Failure erasing PID %i  from list of suspended PIDs in %s\n",
+                pid, fooName);
+        return errno;
+      }
+    }
+  }
+
+  // provided no specific PID argument -> send to all children
+  else if (commandArgs->length == 1) {
+    // no jobs to background
+    if (suspendedPids.length == 0) {
+      fprintf(stderr, "bg: No suitable jobs\n");
+      return 0;
+    }
+    // copy all suspended PIDs to background
+    OptionalVector optVec = vector_copyConstruct(&suspendedPids);
+    if (!optVec.valid) {
+      fprintf(stderr, "Failure to copy construct child PIDs in %s", fooName);
+      vector_freeData(&optVec.data);
+      return errno; // errno set by vector_copyConstruct
+    }
+    childPids = optVec.data;
+    // remove PIDs to background from list of suspended PIDs
+    vector_clear(&suspendedPids);
+  }
+
+  // provided incorrect number of arguments
+  else {
+    fprintf(stderr, "Incorrect arguments provided to %s in %s\n%s\n",
+            BG_COMMAND_NAME, fooName, helpMessage());
+    errno = EPERM;
+    return errno;
+  }
+
+  // Background children
+  for (unsigned pidIdx = 0; pidIdx < childPids.length; ++pidIdx) {
+    const pid_t *pid = (pid_t *)vector_at(&childPids, pidIdx);
+    const int err = bgChild(*pid);
+    if (err != 0) {
+      fprintf(stderr,
+              "Failure trying to bring child with PID %i to foreground in %s\n",
+              *pid, fooName);
+      vector_freeData(&childPids);
+      return errno;
+    }
+  }
+
+  vector_freeData(&childPids);
+  return errno;
+}
+/**
+ * @file cd.c
+ * @author Justen Di Ruscio (3624673)
+ * @brief Contents related to the handling of internal command to change
+ * directories.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <myshell/commands/internal/cd.h>
+
+#include <stdio.h>
+#include <unistd.h>
+
+#include "argument_validity.h"
+#include <jd/error.h>
+#include <jd/string.h>
+#include <jd/vector.h>
+
+static char *helpMessage() {
+  return "cd - change directory\n"
+         "cd [DIRECTORY]\n";
+}
+
+int executeCd(const char *const commandName, const Vector *const commandArgs) {
+  const char fooName[] = "executeCd";
+  const int err = argumentValidityCheck(commandName, commandArgs, fooName);
+  if (err != 0) {
+    return err;
+  }
+
+  // Change current directory
+  if (commandArgs->length == 2) {
+    const String *const path = (String *)vector_at(commandArgs, 1);
+    if (path == (String *)NULL) {
+      fprintf(stderr, "Unable to resolve path from arguments to %s in %s\n",
+              commandName, fooName);
+      return errno; // errno set by vector_at
+    }
+    chdir(path->data);
+  } else {
+    fprintf(stderr,
+            "%s called with %zu positional arguments but expects 1\n%s\n",
+            commandName, commandArgs->length - 1, helpMessage());
+    errno = EINVAL;
+  }
+  return errno;
+}
+/**
+ * @file exit.c
+ * @author Justen Di Ruscio (3624673)
+ * @brief Contents related to exiting myshell
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#define _POSIX_C_SOURCE 200809L
+
+#include <myshell/commands/internal/exit.h>
+
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "argument_validity.h"
+#include <jd/error.h>
+#include <jd/string.h>
+#include <myshell/job_states.h>
+
+static char *helpMessage() {
+  return "exit - exit program"
+         "Exits program with status code 0 or that of the optional\n"
+         "argument converted to an integer\n"
+         "exit [STATUS]\n";
+}
+
+int executeExit(const char *const commandName,
+                const Vector *const commandArgs) {
+  const char fooName[] = "executeExit";
+  const int err = argumentValidityCheck(commandName, commandArgs, fooName);
+  if (err != 0) {
+    return err;
+  }
+
+  // Exit Program
+  int statusCode = 0;
+  if (commandArgs->length == 2) { // provided single status code
+    const String *const statusString = (String *)vector_at(commandArgs, 1);
+    if (statusString == (String *)NULL) {
+      fprintf(stderr,
+              "Could not resolve second argument provided to exit in %s\n",
+              fooName);
+      return errno; // errno set by vector_at
+    }
+    statusCode = strtol(statusString->data, NULL, 10);
+    if (errno != 0) {
+      fprintf(stderr,
+              "Failure converting provided exit status to integer in %s\n",
+              fooName);
+      return errno; // errno set by strtol
+    }
+  } else if (commandArgs->length > 2) { // provided too many arguments
+    fprintf(stderr, "Too many arguments provided to %s in %s\n%s\n",
+            EXIT_COMMAND_NAME, fooName, helpMessage());
+    errno = EPERM;
+    return EPERM;
+  }
+
+  // Kill all child processes in background or suspended
+  for (unsigned i = 0; i < bgPids.length; ++i) {
+    const pid_t *pid = (pid_t *)vector_at(&bgPids, i);
+    kill(*pid, SIGINT);
+  }
+  for (unsigned i = 0; i < suspendedPids.length; ++i) {
+    const pid_t *pid = (pid_t *)vector_at(&suspendedPids, i);
+    kill(*pid, SIGINT);
+  }
+
+  // Exit program
+  exit(statusCode);
+}
+/**
+ * @file fg.c
+ * @author Justen Di Ruscio (3624673)
+ * @brief Contents related to the handling of the internal command to foreground
+ * processes.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#define _POSIX_C_SOURCE 200809L
+
+#include <myshell/commands/internal/fg.h>
+
+#include <signal.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include "argument_validity.h"
+#include <jd/error.h>
+#include <jd/string.h>
+#include <jd/vector.h>
+#include <myshell/job_states.h>
+
+static char *helpMessage() {
+  return "fg - bring job to foreground\n"
+         "If no job PID is specified, all child process are brought to\n"
+         "foreground\n"
+         "fg [PID]\n";
+}
+
+/**
+ * @brief Sends process with PID pid to foreground. Sets errno upon error.
+ *
+ * @param pid process ID to foreground
+ * @return int errno
+ */
+static int fgChild(const pid_t pid) {
+  const char fooName[] = "fgChild";
+
+  // Add child PID to list of foreground jobs
+  const bool pushed = vector_pushBack(&fgPids, &pid);
+  if (!pushed) {
+    fprintf(stderr, "Failed to add pid %i to list of foreground jobs in %s\n",
+            pid, fooName);
+    return errno;
+  }
+
+  // Send signal to job with specified PID
+  const bool sent = !kill(pid, SIGCONT);
+  if (!sent) {
+    fprintf(stderr,
+            "Failed to send SIGCONT (%i) signal to child with PID %i in %s\n",
+            SIGCONT, pid, fooName);
+    return errno;
+  }
+
+  return 0;
+}
+
+int executeFg(const char *const commandName, const Vector *const commandArgs) {
+  const char fooName[] = "executeFg";
+  Vector childPids = vector_constructEmpty(sizeof(pid_t));
+  int err = argumentValidityCheck(commandName, commandArgs, fooName);
+  if (err != 0) {
+    return err; // errno set by argumentValidityCheck
+  }
+
+  // Parse provided arguments for job PID
+  // provided single PID argument -> parse single PID
+  if (commandArgs->length == 2) {
+    // convert arg to int
+    const String *pidStr = (String *)vector_at(commandArgs, 1);
+    const int pid = strtol(pidStr->data, NULL, 10);
+    if (errno != 0) {
+      fprintf(stderr, "Failure converting provided PID %s to integer in %s\n",
+              pidStr->data, fooName);
+      return errno; // errno set by strtol
+    }
+    // find PID arg in suspended or bg PIDs
+    ssize_t suspendedIdx = vector_find(&suspendedPids, &pid);
+    ssize_t bgIdx = vector_find(&bgPids, &pid);
+    if (suspendedIdx == -1 && bgIdx == -1) {
+      fprintf(stderr, "PID %i is not a suspended or background subprocess\n",
+              pid);
+      return ENOENT;
+    }
+    // add PID arg processes to foreground
+    const bool pushed = vector_pushBack(&childPids, &pid);
+    if (!pushed) {
+      fprintf(stderr,
+              "Failure adding pid %i to list of pids to foreground in %s\n",
+              pid, fooName);
+      vector_freeData(&childPids);
+      return errno; // errno set by vector_pushBack
+    }
+
+    // remove PID from suspended/bg lists
+    bool erased;
+    if (suspendedIdx == -1) {
+      erased = vector_erase(&bgPids, bgIdx);
+      if (!erased) {
+        fprintf(
+            stderr,
+            "failed to erase %zu element in list of background PIDs in %s\n",
+            bgIdx, fooName);
+        return errno; // errno set by vector_erase
+      }
+    } else {
+      erased = vector_erase(&suspendedPids, suspendedIdx);
+      if (!erased) {
+        fprintf(stderr,
+                "failed to erase %zu element in list of suspended PIDs in %s\n",
+                suspendedIdx, fooName);
+        return errno; // errno set by vector_erase
+      }
+    }
+  }
+
+  // provided no specific PID argument -> send to all children
+  else if (commandArgs->length == 1) {
+    // no jobs to foreground
+    if (suspendedPids.length == 0 && bgPids.length == 0) {
+      fprintf(stderr, "fg: No such job\n");
+      return 0;
+    }
+    // assign all suspended and background PIDS child PIDS to foreground
+    OptionalVector optVec = vector_append(&suspendedPids, &bgPids);
+    if (!optVec.valid) {
+      fprintf(stderr, "Failure to append suspended and background PIDs in %s",
+              fooName);
+      vector_freeData(&optVec.data);
+      return errno; // errno set by vector_append
+    }
+    childPids = optVec.data;
+    vector_clear(&suspendedPids);
+    vector_clear(&bgPids);
+  }
+
+  // provided incorrect number of arguments
+  else {
+    fprintf(stderr, "Incorrect arguments provided to %s in %s\n%s\n",
+            FG_COMMAND_NAME, fooName, helpMessage());
+    errno = EPERM;
+    return errno;
+  }
+
+  // Foreground children
+  for (unsigned pidIdx = 0; pidIdx < childPids.length; ++pidIdx) {
+    const pid_t *pid = (pid_t *)vector_at(&childPids, pidIdx);
+    const int err = fgChild(*pid);
+    if (err != 0) {
+      fprintf(stderr,
+              "Failure trying to bring child with PID %i to foreground in %s\n",
+              *pid, fooName);
+      vector_freeData(&childPids);
+      return errno;
+    }
+  }
+
+  // Wait for all foregrounded children
+  const bool waited = waitForForegroundPids();
+  if (!waited) {
+    fprintf(stderr, "Parent %i failed to wait for children in %s\n", getpid(),
+            fooName);
+    return errno; // errno set by waitForForegroundPids
+  }
+
+  vector_freeData(&childPids);
+  return errno;
+}
+/**
+ * @file job_states.c
+ * @author Justen Di Ruscio (3624673)
+ * @brief Contents related to process states and transitioning between them.
+ * Vectors of PIDs to track states of child processes and a useful wait
+ * function.
+ *
+ * @version 0.1
+ * @date 2021-02-17
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <myshell/job_states.h>
+
+#include <errno.h>
+#include <stdio.h>
+#include <sys/signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+Vector fgPids = {
+    .data = NULL, .length = 0, .capacity = 0, .dataSize = sizeof(pid_t)};
+
+Vector suspendedPids = {
+    .data = NULL, .length = 0, .capacity = 0, .dataSize = sizeof(pid_t)};
+
+Vector bgPids = {
+    .data = NULL, .length = 0, .capacity = 0, .dataSize = sizeof(pid_t)};
+
+bool waitForForegroundPids() {
+  const char fooName[] = "waitForForegroundPids";
+
+  OptionalVector spawnedPids = vector_copyConstruct(&fgPids);
+  if (!spawnedPids.valid) {
+    fprintf(stderr, "Failed to copy foreground PIDs in %s\n", fooName);
+    return false; // errno set by vector_copyConstruct
+  }
+
+  // Iterate through copied PIDs and wait for each one, removing it from fgPids
+  // when it finishes
+  for (unsigned childIdx = 0; childIdx < fgPids.length; ++childIdx) {
+    // Wait for next foreground PID
+    int status;
+    const pid_t *pid = (pid_t *)vector_at(&spawnedPids.data, childIdx);
+    const pid_t childPid = waitpid(*pid, &status, WUNTRACED);
+    if (childPid == -1 && errno != EINTR) { // errno set by waitpid
+      fprintf(stderr, "Parent %i failed to wait for child %i in %s\n", getpid(),
+              *pid, fooName);
+      return false;
+    }
+
+    // Find index of stopped child in fgPids
+    const ssize_t fgPidIdx = vector_find(&fgPids, (void *)pid);
+    if (fgPidIdx < 0) {
+      fprintf(stderr, "Lost tracking of child PIDs. Cannot find %i in %s\n",
+              *pid, fooName);
+      errno = ESRCH;
+      return false;
+    }
+
+    // Add PID to suspendPids list if SIGTSTP signal stopped child
+    if (WIFEXITED(status) == 0) {
+      vector_pushBack(&suspendedPids, pid);
+    }
+
+    // erase PID from fgPids
+    const bool erased = vector_erase(&fgPids, fgPidIdx);
+    if (!erased) { // errno set by vector_erase
+      fprintf(stderr, "Failure erasing PID %i from foreground PIDs in %s\n",
+              *pid, fooName);
+      return false;
+    }
+  }
+
+  return true;
+}
+/**
+ * @file main.c
+ * @author Justen Di Ruscio (3624673)
+ * @brief Main entry-point of myshell. Provides a basic shell with piping and
+ * job control.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include <jd/error.h>
+#include <jd/string.h>
+#include <jd/vector.h>
+
+#include <myshell/commands/commands.h>
+#include <myshell/job_states.h>
+#include <myshell/prompt.h>
+#include <myshell/signal_handlers.h>
+
+// ========================== Exiting Program ============================
+/**
+ * @brief Frees all of the arguments; the common, persistent objects used in
+ * main()
+ *
+ * @param cwd current working directory String
+ * @param userInput user input to command line
+ * @param inputCommands all of the piped input commands
+ * @param commandArgs the current list of command args
+ * @param numCommands number of piped commands
+ */
+void freeAll(const String *const cwd, const String *const userInput,
+             const Vector *const inputCommands, const Vector *const commandArgs,
+             const unsigned numCommands) {
+  string_freeData(cwd);
+  string_freeData(userInput);
+  vector_freeElements(inputCommands);
+  vector_freeData(inputCommands);
+  if (commandArgs != (Vector *)NULL) {
+    // for each command, clear its set of arguments
+    for (unsigned cmdIdx = 0; cmdIdx < numCommands; ++cmdIdx) {
+      const Vector arguments = commandArgs[cmdIdx];
+      vector_freeElements(&arguments);
+      vector_freeData(&arguments);
+    }
+  }
+}
+
+/**
+ * @brief Frees all of the arguments; the common, persistent objects used in
+ * main(), and exits the program
+ *
+ * @param cwd
+ * @param userInput
+ * @param inputCommands
+ * @param commandArguments
+ * @param numCommands
+ */
+void freeAllAndExit(const String *const cwd, const String *const userInput,
+                    const Vector *const inputCommands,
+                    const Vector *const commandArguments,
+                    const size_t numCommands) {
+  const int exitCode = errno;
+  freeAll(cwd, userInput, inputCommands, commandArguments, numCommands);
+  handleExitError(exitCode);
+}
+
+// ========================== Main ============================
+int main() {
+  int returnCode = EXIT_FAILURE;
+
+  // Register signal handler for myshell (parent process)
+  const __sighandler_t registered = signal(SIGTSTP, handleSignal);
+  if (registered == SIG_ERR) {
+    fprintf(stderr, "Failure registering handler for SIGTSTP (%i) signal\n",
+            SIGTSTP);
+    handleExitError(errno);
+  }
+
+  // Construct initial string to store cwd
+  const unsigned defaultCwdLength = 1 << 7;
+  OptionalString cwdConstructed = string_constructCapacity(defaultCwdLength);
+  if (!cwdConstructed.valid) {
+    fprintf(stderr,
+            "Failure constructing string of length %u to store current "
+            "working directory\n",
+            defaultCwdLength);
+    string_freeData(&cwdConstructed.data);
+    handleExitError(errno);
+  }
+  String cwd = cwdConstructed.data;
+
+  // String to store user's input commands
+  const unsigned defaultInputLength = 1 << 8;
+  OptionalString inputOpt = string_constructCapacity(defaultInputLength);
+  if (!inputOpt.valid) {
+    fprintf(stderr,
+            "Failure constructing string of length %u to store user input\n",
+            defaultInputLength);
+    string_freeData(&inputOpt.data);
+    handleExitError(errno);
+  }
+  String userInput = inputOpt.data;
+
+  // Continuously wait for user input on command line
+  while (true) {
+    // Print prompt and read user's commands
+    printPrompt(&cwd);
+    const bool readValid = readInputLine(&userInput, NULL);
+    if (!readValid) {
+      fprintf(stderr, "Failure reading user input from command line\n");
+      freeAllAndExit(&cwd, &userInput, NULL, NULL, 0);
+    }
+
+    // Split command-line into piped commands
+    OptionalVector inputSplit = string_split(&userInput, PIPE_DELIMETER);
+    if (!inputSplit.valid) {
+      fprintf(stderr, "Unable to split user input into commands\n");
+      freeAllAndExit(&cwd, &userInput, &inputSplit.data, (Vector *)NULL,
+                     inputSplit.data.length);
+    }
+    Vector inputCommands = inputSplit.data;
+
+    // Split each piped command into arguments. Do this before executing
+    // commands in order to validate command name is known
+
+    // create arrays to store vectors of split command args, and command names
+    const size_t numCmds = inputCommands.length;
+    Vector commandArgs[numCmds];
+    enum CommandName commandNames[numCmds];
+
+    // for each piped command, process command arguments
+    for (unsigned cmdIdx = 0; cmdIdx < inputCommands.length; ++cmdIdx) {
+      // Split command into arguments.
+      // access single piped command:
+      const String *inputCommand = (String *)vector_at(&inputCommands, cmdIdx);
+      if (inputCommand == (String *)NULL) {
+        fprintf(stderr, "Error accessing element %u of inputCommands\n",
+                cmdIdx);
+        freeAllAndExit(&cwd, &userInput, &inputCommands, commandArgs, numCmds);
+      }
+      // strip unnecessary chars from input command
+      const OptionalString optCmd =
+          string_strip(inputCommand, &defaultStripChars);
+      if (!optCmd.valid) {
+        fprintf(
+            stderr,
+            "Failure stripping unnecessary characters from input command %s\n",
+            inputCommand->data);
+        string_freeData(&optCmd.data);
+        freeAllAndExit(&cwd, &userInput, &inputCommands, commandArgs, numCmds);
+      }
+      const String cmd = optCmd.data;
+
+      // split single piped command into arguments
+      OptionalVector argumentSplit = string_split(&cmd, ARG_DELIMETER);
+      string_freeData(&cmd);
+      if (!argumentSplit.valid) {
+        fprintf(stderr, "Unable to split user command %u into arguments\n",
+                cmdIdx);
+        vector_freeElements(&argumentSplit.data);
+        vector_freeData(&argumentSplit.data);
+        freeAllAndExit(&cwd, &userInput, &inputCommands, commandArgs, numCmds);
+      }
+      Vector currentCmdArgs = argumentSplit.data;
+      currentCmdArgs.elementDeleter = string_freeDataVoid;
+
+      if (currentCmdArgs.length) {
+        // Determine and store command name from arg0, if known
+        String *arg0 = (String *)vector_at(&currentCmdArgs, 0);
+
+        enum CommandName name = parseCommandName(arg0);
+        commandNames[cmdIdx] = name;          // store resolved name
+        commandArgs[cmdIdx] = currentCmdArgs; // store split arguments
+      } else {
+        vector_freeElements(&currentCmdArgs);
+        vector_freeData(&currentCmdArgs);
+      }
+    }
+
+    // For each piped command, run command and pipe them together
+    int pipeDes[2];
+    int pipeWrite = 0, pipeRead = 0;
+    for (unsigned cmdIdx = 0; cmdIdx < inputCommands.length; ++cmdIdx) {
+      const bool oddCommand = cmdIdx & 0x01;
+      // Name, arguments, and new pipe for current piped command
+      enum CommandName name = commandNames[cmdIdx];
+      Vector currentCmdArgs = commandArgs[cmdIdx];
+      if (cmdIdx < inputCommands.length - 1) { // create new pipe
+        const int piped = pipe(pipeDes);
+        if (piped == -1) {
+          fprintf(stderr, "Failure creating pipes between commands\n");
+          freeAllAndExit(&cwd, &userInput, &inputCommands, commandArgs,
+                         numCmds);
+        }
+        pipeWrite = pipeDes[1];
+      }
+
+      // Execute Internal Command
+      if (name != Unknown) {
+        if (name == Exit) {
+          freeAll(&cwd, &userInput, &inputCommands, NULL, numCmds);
+        }
+        int result = execInternal(name, &currentCmdArgs);
+        if (result != 0) {
+          fprintf(stderr, "Error executing internal command\n");
+          handleErrorMsg(result);
+        }
+      }
+      // Execute System Command
+      else {
+        if (suspendedPids.length || bgPids.length) {
+          printf(
+              "Not allowed to start new command while you have a job active\n");
+        } else {
+          pid_t pid = fork();
+          if (pid == -1) {
+            fprintf(stderr, "Unable to fork process %i\n", getpid());
+            freeAllAndExit(&cwd, &userInput, &inputCommands, commandArgs,
+                           numCmds);
+          }
+          // Parent process
+          else if (pid != 0) {
+            // Add child to list of jobs in foreground
+            vector_pushBack(&fgPids, &pid);
+
+            // Close file descriptors for pipe
+            if (inputCommands.length > 1) {
+              if (cmdIdx < inputCommands.length - 1) {
+                close(pipeWrite);
+              }
+              if (oddCommand || cmdIdx == inputCommands.length - 1) {
+                close(pipeRead);
+              }
+            }
+
+            pipeRead = pipeDes[0]; // update read end of pipe for next cmd
+          }
+          // Child process
+          else {
+            // Register default signal handler
+            const __sighandler_t registered = signal(SIGTSTP, SIG_DFL);
+            if (registered == SIG_ERR) {
+              fprintf(stderr,
+                      "Failure registering handler for SIGTSTP (%i) signal\n",
+                      SIGTSTP);
+              freeAll(&cwd, &userInput, &inputCommands, commandArgs, numCmds);
+              handleExitError(errno);
+            }
+
+            // Setup pipes between commands
+            if (inputCommands.length >= 2) {
+              // connect reading end of pipe to process
+              if (cmdIdx > 0) {
+                const int dupped = dup2(pipeRead, STDIN_FILENO);
+                if (dupped == -1) {
+                  const int err = errno;
+                  fprintf(stderr, "Child %i failed to assign pipe to %s\n",
+                          getpid(), "stdin");
+                  errno = err;
+                  freeAllAndExit(&cwd, &userInput, &inputCommands, commandArgs,
+                                 numCmds);
+                }
+                close(pipeRead);
+              }
+              // connect writing end of pipe to process
+              if (cmdIdx < inputCommands.length - 1) {
+                const int dupped = dup2(pipeWrite, STDOUT_FILENO);
+                if (dupped == -1) {
+                  const int err = errno;
+                  fprintf(stderr, "Child %i failed to assign pipe to %s\n",
+                          getpid(), "stdout");
+                  errno = err;
+                  freeAllAndExit(&cwd, &userInput, &inputCommands, commandArgs,
+                                 numCmds);
+                }
+                close(pipeWrite);
+              }
+            }
+
+            // Run system command
+            returnCode = execSystem(&currentCmdArgs);
+            errno = returnCode;
+            fprintf(stderr, "Error executing system command\n");
+            freeAllAndExit(&cwd, &userInput, &inputCommands, commandArgs,
+                           numCmds);
+            return returnCode;
+          }
+        }
+      }
+    }
+
+    // After all commands have been forked and executed, wait each of them to
+    // finish or get stopped Wait for last child to finish
+    if (fgPids.length > 0) {
+      const bool waited = waitForForegroundPids();
+      if (!waited) { // errno set by waitForForegroundPids
+        fprintf(stderr, "Failed to wait for foreground PIDs\n");
+        freeAllAndExit(&cwd, &userInput, &inputCommands, commandArgs, numCmds);
+      }
+    }
+
+    freeAll((String *)NULL, (String *)NULL, &inputCommands, commandArgs,
+            numCmds);
+  }
+  return returnCode;
+}
+/**
+ * @file prompt.c
+ * @author Justen Di Ruscio (3624673)
+ * @brief Function definitions specific to myshell's user prompt.
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#define _POSIX_C_SOURCE 200809L
+
+#include <myshell/prompt.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+#include <jd/string.h>
+#include <myshell/commands/internal/exit.h>
+
+bool ignoreInput = false;
+
+const String defaultStripChars = {
+    .data = ARG_DELIMETER, .length = ARG_DELIMETER_LEN, .capacity = 0};
+
+void printPrompt(String *const cwd) {
+  const char fooName[] = "printPrompt";
+  // Argument Validity Check
+  errno = 0;
+  if (cwd == (String *)NULL) {
+    fprintf(stderr, "field 'cwd' must point to a valid address in %s\n",
+            fooName);
+    errno = EPERM;
+  }
+
+  // Resolve current working directory
+  // populate cwd string with CWD, resizing as needed
+  while (true) {
+    const char *path = getcwd(cwd->data, cwd->capacity);
+    // handle getcwd errors
+    if (path == (char *)NULL) { // cwd isn't large enough -> resize
+      const bool success = string_reserve(cwd, (1 + cwd->capacity) << 2);
+      if (!success) { // string_resize may set errno
+        fprintf(stderr,
+                "Failure resizing buffer to store current working directory in "
+                "%s\n",
+                fooName);
+        handleExitError(errno);
+      }
+      continue;
+    }
+    if (errno != 0) { // other error with getcwd
+      fprintf(stderr, "Failure reading current working directory in %s\n",
+              fooName);
+      handleExitError(errno);
+    }
+
+    // no getcwd error
+    cwd->length = strlen(cwd->data);
+    break;
+  }
+
+  // Print prompt
+  printf("%s%% ", cwd->data);
+}
+
+bool readInputLine(String *const userInput, const String *stripChars) {
+  const char fooName[] = "readInputLine";
+  bool valid = false;
+
+  // Argument Validity Checks
+  errno = 0;
+  if (userInput == (String *)NULL) {
+    fprintf(stderr, "argument 'userInput' of %s must point to a valid string\n",
+            fooName);
+    errno = EPERM;
+    return valid;
+  }
+
+  if (stripChars == (String *)NULL) {
+    stripChars = &defaultStripChars;
+  }
+
+  // Read stdin as user input
+  ignoreInput = false;
+  char *read = fgets(userInput->data, userInput->capacity, stdin);
+  if (ignoreInput) { // ignore input on Ctrl+Z
+    userInput->length = 0;
+    userInput->data[0] = '\0';
+  } else if (read == NULL) { // end-of-file. Ctrl+D
+    // overwrite input with exit command
+    const size_t cmdLen = strlen(EXIT_COMMAND_NAME);
+    string_reserve(userInput, cmdLen);
+    userInput->length = cmdLen;
+    strcpy(userInput->data, EXIT_COMMAND_NAME);
+  } else {
+    // overwrite input with stripped version of input
+    userInput->length = strlen(userInput->data);
+    const OptionalString stripped = string_strip(userInput, stripChars);
+    if (!stripped.valid) {
+      fprintf(stderr,
+              "Failure removing unnecessary characters from user input, %s, in "
+              "%s\n",
+              userInput->data, fooName);
+      return valid; // errno set by string_strip
+    }
+    const String strippedInput = stripped.data;
+    userInput->length = strlen(strippedInput.data);
+    strcpy(userInput->data, strippedInput.data);
+    string_freeData(&strippedInput);
+  }
+
+  valid = true;
+  return valid;
+}
+/**
+ * @file signal_handlers.c
+ * @author Justen Di Ruscio
+ * @brief Function defintions to handle specific signals received by processes
+ * @version 0.1
+ * @date 2021-02-16
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#define _POSIX_C_SOURCE 200809L
+
+#include <myshell/signal_handlers.h>
+
+#include <stdio.h>
+
+#include <jd/error.h>
+#include <jd/string.h>
+#include <myshell/job_states.h>
+
+extern bool ignoreInput;
+
+/**
+ * @brief Prints information regarding suspending processes. Updates job state
+ * tracking. Exits the program upon failure.
+ *
+ */
+static void handleSigTStop() {
+  // Handle Signal
+  if (fgPids.length == 0 && bgPids.length == 0) {
+    printf("\nNo job to suspend\n");
+    ignoreInput = true;
+  } else { // child process running
+    if (bgPids.length != 0) {
+      ignoreInput = true;
+      vector_assign(&suspendedPids, &bgPids);
+      vector_clear(&bgPids);
+    }
+  }
+}
+
+void handleSignal(const int sigNum) {
+  const char fooName[] = "handleSignal";
+
+  // Re-register signal
+  const __sighandler_t registered = signal(SIGTSTP, handleSignal);
+  if (registered == SIG_ERR) {
+    fprintf(stderr,
+            "Failure re-registering handler for SIGTSTP (%i) signal in %s\n",
+            SIGTSTP, fooName);
+    handleExitError(errno);
+  }
+
+  switch (sigNum) {
+  case SIGTSTP:
+    handleSigTStop();
+    break;
+  default:
+    fprintf(
+        stderr,
+        "Signal number %i does not have an associated signal handler in %s\n",
+        sigNum, fooName);
+    handleExitError(EPERM);
+  }
+}
+#pragma once
+/**
+ * @file argument_validity.h
+ * @author Justen Di Ruscio (3624673)
+ * @brief Contains symbols for functions related to argument validity checks
+ * for internal commands. All internal commands have the same interface - this
+ * allows the same argument validity checks among all executor functions.
+ * @version 0.1
+ * @date 2021-02-17
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <jd/vector.h>
+
+/**
+ * @brief Used to check validity of arguments passed to internal command
+ * executors. Sets errno upon error.
+ *
+ * @param commandName
+ * @param commandArgs
+ * @param fooName
+ * @return int
+ */
+int argumentValidityCheck(const char *const commandName,
+                          const Vector *const commandArgs,
+                          const char *const fooName);

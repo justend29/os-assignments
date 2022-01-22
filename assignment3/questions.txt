@@ -1,0 +1,6 @@
+- why do bullets remain on the game board after they hit the caterpillar?
+- why do borders not reload after a bullet goes through them and instead leave
+  an empty character after bullets pass?
+- the next row and changing direction of the caterpillars makes sense, but does
+  the line from the assignment 'note in the sample how they wrap around (tricky
+  logic)' refer to direction change process or something else?

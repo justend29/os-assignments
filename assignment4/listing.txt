@@ -1,0 +1,1711 @@
+#pragma once
+/**
+ * @file boot_sector.h
+ * @author Justen Di Ruscio
+ * @brief Contains declarations related to the boot sector of FAT32 file system
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <inttypes.h>
+
+/* boot sector constants */
+#define BS_OEMName_LENGTH 8
+#define BS_VolLab_LENGTH 11
+#define BS_FilSysType_LENGTH 8
+
+// Serialization struct representing exact boot sector
+#pragma pack(push)
+#pragma pack(1)
+
+struct fat32BS_struct {
+	char BS_jmpBoot[3];
+	char BS_OEMName[BS_OEMName_LENGTH];
+	uint16_t BPB_BytesPerSec;
+	uint8_t BPB_SecPerClus;
+	uint16_t BPB_RsvdSecCnt;
+	uint8_t BPB_NumFATs;
+	uint16_t BPB_RootEntCnt;
+	uint16_t BPB_TotSec16;
+	uint8_t BPB_Media;
+	uint16_t BPB_FATSz16;
+	uint16_t BPB_SecPerTrk;
+	uint16_t BPB_NumHeads;
+	uint32_t BPB_HiddSec;
+	uint32_t BPB_TotSec32;
+	uint32_t BPB_FATSz32;
+	uint16_t BPB_ExtFlags;
+	uint8_t BPB_FSVerLow;
+	uint8_t BPB_FSVerHigh;
+	uint32_t BPB_RootClus;
+	uint16_t BPB_FSInfo;
+	uint16_t BPB_BkBootSec;
+	char BPB_reserved[12];
+	uint8_t BS_DrvNum;
+	uint8_t BS_Reserved1;
+	uint8_t BS_BootSig;
+	uint32_t BS_VolID;
+	char BS_VolLab[BS_VolLab_LENGTH];
+	char BS_FilSysType[BS_FilSysType_LENGTH];
+	char BS_CodeReserved[420];
+	uint8_t BS_SigA;
+	uint8_t BS_SigB;
+};
+
+#pragma pack(pop)
+
+typedef struct fat32BS_struct fat32_bootSector;
+
+
+
+// checks signature of sector 0
+// sets errno on error
+/**
+ * @brief Validates the signature of the provided boot sector. Sets errno on error of function operation
+ *
+ * @param bs boot sector to check signature of
+ * @return true signature is valid
+ * @return false signature is invalid
+ */
+bool bootSectorSignatureValid(const fat32_bootSector* const bs);
+#pragma once
+/**
+ * @file directory.h
+ * @author Justen Di Ruscio
+ * @brief Contains declarations pertaining to FAT32 directory entries
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <stdint.h>
+
+#include "fat32_header.h"
+
+// Directory entry constant values
+#define FREE_DIR_ENTRY_NAME 0xE5
+#define LAST_DIR_ENTRY_NAME 0x00
+
+// Attribute value constants
+#define ATTR_READ_ONLY 0x01
+#define ATTR_HIDDEN 0x02
+#define ATTR_SYSTEM 0x04
+#define ATTR_VOLUME_ID 0x08
+#define ATTR_DIRECTORY 0x10
+#define ATTR_ARCHIVE 0x20
+#define ATTR_LONG_NAME                                                         \
+  (ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_VOLUME_ID)
+#define ATTR_LONG_NAME_MASK (ATTR_LONG_NAME | ATTR_DIRECTORY | ATTR_ARCHIVE)
+
+// Serialization struct representing exact boot sector
+#pragma pack(push)
+#pragma pack(1)
+
+typedef struct fat32_directory {
+  uint8_t DIR_Name[DIR_NAME_LENGTH];
+  uint8_t DIR_Attr;
+  uint8_t DIR_NTRes;
+  uint8_t DIR_CrtTimeTenth;
+  uint16_t DIR_CrtTime;
+  uint16_t DIR_CrtDate;
+  uint16_t DIR_LstAccDate;
+  uint16_t DIR_FstClusHI;
+  uint16_t DIR_WrtTime;
+  uint16_t DIR_WrtDate;
+  uint16_t DIR_FstClusLO;
+  uint32_t DIR_FileSize;
+} fat32_directory;
+
+#pragma pack(pop)
+
+/**
+ * @brief Fills cleanName with a null-terminated, cleaned directory name from rawName. Follows rules specified on page 23 of FAT filesystems document.
+ *
+ * @param cleanName cleaned version of rawName
+ * @param rawName direct DIR_Name from fat32_directory
+ */
+void dirName(char cleanName[DIR_NAME_LENGTH+1], const char rawName[DIR_NAME_LENGTH]);
+
+
+/**
+ * @brief Fills nextDirectory with the next directory entry in the cluster chain starting at startClusterNum. Should be first called with startClusterNum populated, and then subsequent calls should leave this field NULL to transition to subsequent directory entries. Stores static variables that are reset on first call with startClusterNum; i.e. not thread safe.
+ *
+ * @param header FAT32 volume header
+ * @param nextDirectory location where next directory in chain will copied
+ * @param startClusterNum first cluster in chain
+ * @return uint32_t When another directory entry was available, and nextDirectory was populated, this is the cluster number where the directory resides. Otherwise, at the end of the cluster chain, 0 will be returned
+ */
+uint32_t nextDirEntry(const fat32_header *const header,
+                  fat32_directory *const nextDirectory,
+                  const uint32_t *const startClusterNum);
+#pragma once
+/**
+ * @file fat.h
+ * @author Justen Di Ruscio
+ * @brief Contains declarations pertaining specifically to the FAT data structure of FAT32 filesystem
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#include "fat32_header.h"
+
+#define EMPTY_CLUSTER 0x00000000
+#define EOC_CLUSTER 0x0FFFFFFF
+#define BAD_CLUSTER 0x0FFFFFF7
+
+/**
+ * @brief Validates the signature of the FAT data structure by checking values of 0th and 1st FAT entries. Sets errno on error of this function
+ *
+ * @return true FAT signature is valid
+ * @return false FAT signature is invalid
+ */
+bool fatSignatureValid();
+
+// sets errno on error & returns -1
+// result is 32bit unsigned
+
+/**
+ * @brief Returns the value in the FAT entry associated with clusterNum or -1 on error with setting errno.
+ *
+ * @param header FAT32 header
+ * @param clusterNum cluster number to get FAT entry value for
+ * @return int64_t value of FAT entry
+ */
+int64_t fatEntry(const fat32_header *const header, const uint32_t clusterNum);
+
+/**
+ * @brief Reads entire cluster located at clusterNum into cluster. Sets errno on error
+ *
+ * @param header FAT32 header
+ * @param clusterNum cluster number to read
+ * @param cluster location to place cluster contents. Should point to array of size bs->BPB_BytesPerSec * bs->BPB_SecPerClus, where bs is the bootSector in the header.
+ */
+void readClusterBytes(const fat32_header *const header,
+                             const uint32_t clusterNum, uint8_t *cluster);
+#pragma once
+/**
+ * @file fat32.h
+ * @author Justen Di Ruscio
+ * @brief Contains declarations relating to FAT32 filesystem as an entity
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <inttypes.h>
+#include <stdbool.h>
+
+#include "boot_sector.h"
+#include "fat32_header.h"
+#include "fsinfo.h"
+
+/**
+ * @brief Reads FAT32 header from disk image located at file descriptor, fd. Allocates on heap; the returned pointer should be cleaned by cleanupHeader. Sets errno on failure and returns NULL
+ *
+ * @param fd file descriptor of opened disk image file
+ * @return fat32_header* parsed FAT32 header
+ */
+fat32_header *readHeader(const int fd);
+
+/**
+ * @brief Cleans header returned from readHeader
+ *
+ * @param header FAT32 header to clean
+ */
+void cleanupHeader(fat32_header *const header);
+
+/**
+ * @brief Determines if disk image type is FAT32 by following steps on page 15 of FAT document; uses count of clusters measurement. Sets errno on error of this function
+ *
+ * @param header FAT32 header
+ * @return true volume is FAT32 type
+ * @return false volume is not FAT32 type; may be FAT12, FAT16, or neither
+ */
+bool isFat32Volume(const fat32_header *const header);
+
+/**
+ * @brief Returns byte offset from start of file where sector of sectorNum is located. Sets errno on error of this function
+ *
+ * @param header FAT32 header
+ * @param sectorNum sector number to resolve byte offset in file for
+ * @return uint64_t byte offset from start of file where sector of sectorNum starts
+ */
+uint64_t seekToSector(const fat32_header* const header, const uint64_t sectorNum);
+
+/**
+ * @brief Returns the sector number of the first sector in the cluster clusterNum. Sets errno on error of this function.
+ *
+ * @param bs FAT32 boot sector; part of the FAT32 header
+ * @param clusterNum cluster number to get sector number for
+ * @return uint64_t sector number of the first sector in cluster clusterNum
+ */
+uint64_t firstSectorNumOfCluster(const fat32_bootSector *const bs,
+                                 const uint32_t clusterNum);
+
+/**
+ * @brief Iterates over FAT data structure and calculates the number of free clusters. Sets errno on error of this function and returns 0
+ *
+ * @param header FAT32 header
+ * @return uint32_t number of free clusters on the volume
+ */
+uint32_t numFreeClusters(const fat32_header *const header);
+#pragma once
+/**
+ * @file fat32_header.h
+ * @author Justen Di Ruscio
+ * @brief Contains definition of FAT32 filesystem header
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include "boot_sector.h"
+#include "fsinfo.h"
+
+#define DIR_NAME_LENGTH 11 // length of directories in directory entry
+
+#pragma pack(push)
+#pragma pack(1)
+
+struct fat32_header {
+  int fileDes; // not part of fat32, but indicates fd of fat32 disk image
+  uint8_t volumeId[DIR_NAME_LENGTH + 1]; // not part of fat32, but indicates volume id
+  fat32_bootSector bootSector;
+  fat32_fsInfo fsInfo;
+};
+
+#pragma pack(pop)
+
+typedef struct fat32_header fat32_header;
+#pragma once
+/**
+ * @file fsinfo.h
+ * @author Justen Di Ruscio
+ * @brief Contains declarations pertaining to FSINFO data structure in FAT32 filesystem
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <stdint.h>
+
+// FSINFO data structure constants
+#define FSI_RESERVED1_NUM_BYTES 480
+#define FSI_RESERVED2_NUM_BYTES 12
+
+// Serialization structure containing exact FSINFO contents in FAT32 file system
+#pragma pack(push)
+#pragma pack(1)
+
+typedef struct fat32_fsInfo_struct {
+  uint32_t FSI_LeadSig;
+  uint8_t FSI_Reserved1[FSI_RESERVED1_NUM_BYTES];
+  uint32_t FSI_StrucSig;
+  uint32_t FSI_Free_Count;
+  uint32_t FSI_Nxt_Free;
+  uint8_t FSI_Reserved2[FSI_RESERVED2_NUM_BYTES];
+  uint32_t FSI_TrailSig;
+} fat32_fsInfo;
+
+#pragma pack(pop)
+
+/**
+ * @brief Validates signature of read FSINFO data structure. Sets errno on error of this function
+ *
+ * @param fsInfo FSINFO data structure to validate signature of
+ * @return true signature is valid
+ * @return false signature is invalid or error encountered
+ */
+bool fsInfoSectorSignatureValid(const fat32_fsInfo *const fsInfo);
+/**
+ * @file fat.c
+ * @author Justen Di Ruscio
+ * @brief Contains declarations pertaining specifically to the FAT data
+ * structure of FAT32 filesystem
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+#include "fat.h"
+
+#include <errno.h>
+#include <stdio.h>
+#include <unistd.h>
+
+#include "../error/error.h"
+#include "../fat32/fat32.h"
+
+#define ENTRY_MASK 0x0FFFFFFF
+#define FAT32_OFFSET_SHIFT 2
+
+bool fatSignatureValid(const fat32_header *const header) {
+  const char fooName[] = "fatSignatrueValid";
+
+  // Argument Validity
+  argValidityCheck(header, "header", fooName);
+  if (errno != 0) {
+    return false;
+  }
+
+  // Verify cluster 0 signature
+  int64_t entry = fatEntry(header, 0);
+  if (entry == -1) {
+    fprintf(stderr, "Failure obtaining contents of FAT entry %i in %s\n", 0,
+            fooName);
+    return false; // errno set by fatEntry
+  }
+  uint32_t entry32 = (uint32_t)entry;
+  const uint8_t setLow8 = 0xFF;
+  const bool low8ArentMedia =
+      (entry32 & setLow8) != header->bootSector.BPB_Media;
+  const bool high20ArentSet = ((entry32 | setLow8) & ENTRY_MASK) != ENTRY_MASK;
+  if (low8ArentMedia || high20ArentSet) {
+    return false;
+  }
+
+  // Verify cluster 1 signature
+  entry = fatEntry(header, 1);
+  if (entry == -1) {
+    fprintf(stderr, "Failure obtaining contents of FAT entry %i in %s\n", 1,
+            fooName);
+    return false; // errno set by fatEntry
+  }
+  const uint32_t setLow20 = 0x3FFFFFF;
+  const bool low20NotSet = ((uint32_t)entry & setLow20) != setLow20;
+  if (low20NotSet) {
+    return false;
+  }
+
+  return true;
+}
+
+int64_t fatEntry(const fat32_header *const header, const uint32_t clusterNum) {
+  const char fooName[] = "fatEntry";
+
+  // Argument Validity
+  argValidityCheck(header, "header", fooName);
+  if (errno != 0) {
+    return -1;
+  }
+
+  const fat32_bootSector *const bs = &header->bootSector;
+
+  // Find fat entry for given cluster
+  const uint64_t fatOffset = clusterNum << FAT32_OFFSET_SHIFT;
+  const uint16_t bytesPerSec = bs->BPB_BytesPerSec;
+  const uint64_t fatEntrySecNum =
+      bs->BPB_RsvdSecCnt + (fatOffset / bytesPerSec);
+  const uint16_t fatEntryOffset = fatOffset % bytesPerSec;
+
+  // seek to sector of fat entry
+  seekToSector(header, fatEntrySecNum);
+  if (errno != 0) {
+    fprintf(
+        stderr,
+        "Failure seeking to sector %lu associated with cluster number %u in "
+        "%s\n",
+        fatEntrySecNum, clusterNum, fooName);
+    return -1; // errno set by seekToSector
+  }
+
+  // read sector
+  uint8_t sectorBuff[bytesPerSec];
+  const ssize_t bytesRead = read(header->fileDes, sectorBuff, bytesPerSec);
+  if (bytesRead == -1) {
+    fprintf(stderr, "Failure reading sector number %lu for cluster %i in %s",
+            fatEntrySecNum, clusterNum, fooName);
+    printf("%d\n", errno);
+    return -1; // errno set by read
+  }
+
+  // extract cluster contents from sector contents
+  const uint32_t *const clusterLocation =
+      (uint32_t *)&sectorBuff[fatEntryOffset];
+  const uint32_t clusterContents = (*clusterLocation) & ENTRY_MASK;
+
+  return clusterContents;
+}
+
+void readClusterBytes(const fat32_header *const header,
+                      const uint32_t clusterNum, uint8_t *cluster) {
+  const char fooName[] = "readClusterBytes";
+  const fat32_bootSector *const bs = &header->bootSector;
+
+  // Seek to start of first sector of curDirClus
+  const uint64_t sectorNum = firstSectorNumOfCluster(bs, clusterNum);
+  if (errno != 0) {
+    fprintf(stderr, "Failure calculating first sector of cluster %u in %s\n",
+            clusterNum, fooName);
+    return; // errno set by firstSectorNumOfCluster
+  }
+  seekToSector(header, sectorNum);
+  if (errno != 0) {
+    fprintf(stderr,
+            "Failure seeking to sector %lu in %s to display directory "
+            "contents of cluster %u\n",
+            sectorNum, fooName, clusterNum);
+    return; // errno set by seekToSector
+  }
+
+  // Read entire cluster
+  const uint32_t bytesPerCluster = bs->BPB_BytesPerSec * bs->BPB_SecPerClus;
+  const ssize_t bytesRead = read(header->fileDes, cluster, bytesPerCluster);
+  if (bytesRead == -1) {
+    fprintf(stderr, "Failure reading cluster %u in %s\n", clusterNum, fooName);
+    return; // errno set by read
+  }
+}
+/**
+ * @file fat32.c
+ * @author Justen Di Ruscio
+ * @brief Contains definitions relating to FAT32 filesystem as an entity, and
+ * all definitions for functions relating to FAT32 components
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+#define _FILE_OFFSET_BITS 64
+
+#include "fat32.h"
+
+#include <errno.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "../error/error.h"
+#include "directory.h"
+#include "fat.h"
+
+#define FIRST_DATA_CLUSTER_NUM 2
+
+/**
+ * @brief Set the Header Volume Id of the provided header object. Sets errno on
+ * error of this function and if no VOLUME_ID file is found in the root
+ * directory
+ *
+ * @param header FAT32 header
+ */
+static void setHeaderVolumeId(fat32_header *const header) {
+  const char fooName[] = "setVolumeId";
+
+  // Argument Validity
+  argValidityCheck(header, "header", fooName);
+  if (errno != 0) {
+    return;
+  }
+
+  const fat32_bootSector *const bs = &header->bootSector;
+  const uint32_t rootCluster = bs->BPB_RootClus;
+
+  // Read first directory entry
+  fat32_directory dir;
+  bool dirFound = nextDirEntry(header, &dir, &rootCluster);
+  if (errno != 0) {
+    fprintf(stderr,
+            "Failure reading first directory entry of root cluster %u in %s\n",
+            rootCluster, fooName);
+    return;
+  }
+
+  while (dirFound) {
+    // Set volume ID if directory entry is volume ID file
+    if (dir.DIR_Attr & ATTR_VOLUME_ID) {
+      dirName((char *)header->volumeId, (char *)dir.DIR_Name);
+      return;
+    }
+
+    // Read next directory entry
+    dirFound = nextDirEntry(header, &dir, NULL);
+    if (errno != 0) {
+      fprintf(stderr, "Failure reading next directory entry in %s\n", fooName);
+      return;
+    }
+  }
+
+  fprintf(stderr, "Failure in %s: unable to find file specifying VOLUME_ID\n",
+          fooName);
+  errno = ENOENT;
+}
+
+// ==================== Public Functions ====================
+
+fat32_header *readHeader(const int fd) {
+  const char fooName[] = "readHeader";
+
+  // Allocate memory for header
+  const char *const headerBytes = malloc(sizeof(fat32_header));
+  if (headerBytes == NULL) {
+    fprintf(stderr, "Unable to allocate memory for fat32_header in %s\n",
+            fooName);
+    return NULL; // errno set by malloc
+  }
+  fat32_header *const header = (fat32_header *)headerBytes;
+
+  // Store file descriptor in header
+  header->fileDes = fd;
+
+  // Read boot sector from disk image sector 0
+  fat32_bootSector *const bootSector = &header->bootSector;
+  const size_t bsSize = sizeof(header->bootSector);
+  ssize_t bytesRead = read(fd, bootSector, bsSize);
+  if (bytesRead == -1) {
+    fprintf(stderr,
+            "Failure reading boot sector from disk image into header in  %s",
+            fooName);
+    free(header);
+    return NULL; // errno set by read
+  }
+
+  // Perform validation checks on read boot sector
+  bool sigValid = bootSectorSignatureValid(bootSector);
+  if (errno != 0) {
+    fprintf(stderr, "Failure while validating boot sector signature in %s\n",
+            fooName);
+    free(header);
+    return NULL; // errno set by bootSectorSignatureValid
+  }
+  if (!sigValid) {
+    fprintf(stderr, "Unable to verify boot sector signature in %s\n", fooName);
+    errno = ENOMEDIUM;
+    free(header);
+    return NULL;
+  }
+
+  const bool isFat32 = isFat32Volume(header);
+  if (errno != 0) {
+    fprintf(stderr, "Failure while validating volume is FAT32 in %s\n",
+            fooName);
+    free(header);
+    return NULL; // errno set by isFat32Volume
+  }
+  if (!isFat32) {
+    fprintf(stderr, "Read sector in %s is not part of a FAT32 volume\n",
+            fooName);
+    errno = EMEDIUMTYPE;
+    free(header);
+    return NULL;
+  }
+
+  // Read FSInfo sector from disk
+  const uint32_t fsInfoSectorNum = bootSector->BPB_FSInfo;
+  seekToSector(header, fsInfoSectorNum);
+  if (errno != 0) {
+    fprintf(stderr, "Failure seeking to FSInfo sector on disk image in %s\n",
+            fooName);
+    free(header);
+    return NULL;
+  }
+  fat32_fsInfo *const fsInfoSector = &header->fsInfo;
+  const size_t fsInfoSize = sizeof(header->fsInfo);
+  bytesRead = read(fd, fsInfoSector, fsInfoSize);
+  if (bytesRead == -1) {
+    fprintf(stderr,
+            "Failure reading FSInfo sector from disk image into header in %s\n",
+            fooName);
+    free(header);
+    return NULL; // errno set by read;
+  }
+
+  // Perform validation check on read fsinfo sector
+  sigValid = fsInfoSectorSignatureValid(fsInfoSector);
+  if (errno != 0) {
+    fprintf(stderr, "Failure while validating FSINFO signature in %s\n",
+            fooName);
+    free(header);
+    return NULL; // errno set by fsInfoSectorSignatureValid
+  }
+  if (!sigValid) {
+    fprintf(stderr, "Read FSInfo sector has invalid signature %s\n", fooName);
+    errno = EMEDIUMTYPE;
+    free(header);
+    return NULL;
+  }
+
+  // Perform validation on FAT
+  sigValid = fatSignatureValid(header);
+  if (errno != 0) {
+    fprintf(stderr, "Failure while validating FAT signature in %s\n", fooName);
+    free(header);
+    return NULL; // errno set by fatSignatureValid
+  }
+  if (!sigValid) {
+    fprintf(stderr, "FAT signature is invalid in %s\n", fooName);
+    free(header);
+    return NULL;
+  }
+
+  // Set volume id from file in root directory
+  setHeaderVolumeId(header);
+  if (errno != 0) {
+    fprintf(stderr, "Failure setting header volume ID in %s\n", fooName);
+    return NULL;
+  }
+
+  // Calculate and store free space
+  printf("Calculating free space...\n");
+  uint32_t numFree = numFreeClusters(header);
+  if (errno != 0) {
+    fprintf(stderr, "Failure calculating free space in %s\n", fooName);
+    return NULL;
+  }
+  fsInfoSector->FSI_Free_Count = numFree;
+
+  return header;
+}
+
+void cleanupHeader(fat32_header *const header) { free(header); }
+
+bool isFat32Volume(const fat32_header *const header) {
+  const char fooName[] = "isFat32Volume";
+
+  // Argument Validity
+  errno = 0;
+  if (header == NULL) {
+    fprintf(stderr, "argument 'header' of %s must point to the fat header\n",
+            fooName);
+    errno = EPERM;
+    return false;
+  }
+
+  // Determine FAT Type
+  const fat32_bootSector *const bs = &header->bootSector;
+  // signature matching value in doc indicates optional fat32 fields present
+  if (bs->BS_BootSig != 0x29) {
+    fprintf(stderr, "This program requires the FAT32 volume to contain the "
+                    "optional three FAT32 fields\n");
+    return false;
+  }
+
+  // count of sectors occupied by root directory
+  const uint32_t rootDirSectors =
+      ((bs->BPB_RootEntCnt * 32) + (bs->BPB_BytesPerSec - 1)) /
+      bs->BPB_BytesPerSec;
+  if (rootDirSectors != 0) {
+    return false; // immediately false if not 0
+  }
+
+  // count of sectors in data region of volume
+  const uint16_t fatSize =
+      bs->BPB_FATSz16 != 0 ? bs->BPB_FATSz16 : bs->BPB_FATSz32;
+  const uint16_t totSecs =
+      bs->BPB_TotSec16 != 0 ? bs->BPB_TotSec16 : bs->BPB_TotSec32;
+  const uint32_t numDataSecs =
+      totSecs -
+      (bs->BPB_RsvdSecCnt + (bs->BPB_NumFATs * fatSize) + rootDirSectors);
+
+  // count of clusters
+  const uint32_t numClusters = numDataSecs / bs->BPB_SecPerClus;
+
+  // resolve FAT type
+  if (numClusters < 4085) {
+    // volume is FAT12
+    return false;
+  } else if (numClusters < 65525) {
+    // volume is FAT16
+    return false;
+  } else {
+    // volume is FAT32
+    return true;
+  }
+}
+
+bool bootSectorSignatureValid(const fat32_bootSector *const bs) {
+  const char fooName[] = "bootSectorSignatureValid";
+
+  // Arg Validity
+  argValidityCheck(bs, "bs", fooName);
+  if (errno != 0) {
+    return false; // errno set by argValidityCheck
+  }
+
+  // Check Signatures against values specified in doc
+  return bs->BS_SigA == 0x55 && bs->BS_SigB == 0xAA;
+}
+
+bool fsInfoSectorSignatureValid(const fat32_fsInfo *const fsInfo) {
+  const char fooName[] = "fsInfoSectorSignatureValid";
+
+  // Arg Validity
+  argValidityCheck(fsInfo, "fsInfo", fooName);
+  if (errno != 0) {
+    return false; // errno set by argValidityCheck
+  }
+
+  // Check Signatures against values specified in doc
+  return fsInfo->FSI_LeadSig == 0x41615252 &&
+         fsInfo->FSI_StrucSig == 0x61417272 &&
+         fsInfo->FSI_TrailSig == 0xAA550000;
+}
+
+uint64_t seekToSector(const fat32_header *const header,
+                      const uint64_t sectorNum) {
+  const char fooName[] = "seekToSector";
+
+  // Arg Validity
+  argValidityCheck(header, "header", fooName);
+  if (errno != 0) {
+    return 0; // errno set by argValidityCheck
+  }
+
+  // Seek byte
+  const fat32_bootSector *const bs = &header->bootSector;
+  const off_t byteOffset =
+      lseek(header->fileDes, bs->BPB_BytesPerSec * sectorNum, SEEK_SET);
+  if (byteOffset == -1) {
+    fprintf(stderr, "Failure seeking to sector number %lu in %s\n", sectorNum,
+            fooName);
+  }
+
+  return byteOffset;
+}
+
+uint64_t firstSectorNumOfCluster(const fat32_bootSector *const bs,
+                                 const uint32_t clusterNum) {
+  const char fooName[] = "firstSectorNumOfCluster";
+
+  // Arg Validity
+  argValidityCheck(bs, "bs", fooName);
+  if (errno != 0) {
+    return false; // errno set by argValidityCheck
+  }
+
+  const uint64_t firstDataSector =
+      bs->BPB_RsvdSecCnt + (bs->BPB_NumFATs * bs->BPB_FATSz32);
+  return (clusterNum - 2) * bs->BPB_SecPerClus + firstDataSector;
+}
+
+void dirName(char cleanName[DIR_NAME_LENGTH + 1],
+             const char rawName[DIR_NAME_LENGTH]) {
+  const int8_t readingMain = 0;
+  const int8_t hitSpaces = 1;
+  const int8_t foundExtension = 2;
+  int8_t state = readingMain;
+  uint8_t cleanLocation = 0;
+
+  // Fill clean name using state machine reading rawName
+  for (uint8_t i = 0; i < DIR_NAME_LENGTH; ++i) {
+    if (state == readingMain && i == 7) {
+      state = foundExtension;
+    }
+    if (state == readingMain) {
+      if (rawName[i] == ' ') {
+        state = hitSpaces;
+      } else {
+        cleanName[cleanLocation++] = rawName[i];
+        state = readingMain;
+      }
+    } else if (state == hitSpaces) {
+      if (rawName[i] != ' ') {
+        cleanName[cleanLocation++] = '.';
+        cleanName[cleanLocation++] = rawName[i];
+        state = foundExtension;
+      } else {
+        state = hitSpaces;
+      }
+    } else if (state == foundExtension) {
+      if (rawName[i] != ' ') {
+        cleanName[cleanLocation++] = rawName[i];
+        state = foundExtension;
+      } else {
+        break;
+      }
+    }
+  }
+
+  // Terminate clean name
+  cleanName[cleanLocation] = '\0';
+}
+
+uint32_t nextDirEntry(const fat32_header *const header,
+                      fat32_directory *const nextDirectory,
+                      const uint32_t *const startClusterNum) {
+  const char fooName[] = "nextDirEntry";
+  static uint32_t dirNum = 0;
+  static uint32_t clusterNum = 0;
+  if (startClusterNum != NULL) {
+    clusterNum = *startClusterNum;
+    dirNum = 0;
+  }
+
+  // Arg Validity
+  argValidityCheck(header, "header", fooName);
+  if (errno != 0) {
+    return 0;
+  }
+  if (clusterNum < FIRST_DATA_CLUSTER_NUM) {
+    fprintf(stderr, "Must call %s with 'startClusterNum' value >= %u\n",
+            fooName, FIRST_DATA_CLUSTER_NUM);
+    errno = EPERM;
+    return 0;
+  }
+
+  // List current directory contents spread across all pertinent clusters
+  const fat32_bootSector *const bs = &header->bootSector;
+  const uint32_t bytesPerCluster = bs->BPB_BytesPerSec * bs->BPB_SecPerClus;
+
+  uint32_t nextCluster = fatEntry(header, clusterNum);
+  if (errno != 0) {
+    fprintf(stderr, "Failure following cluster chain in %s\n", fooName);
+    return 0;
+  }
+
+  while (clusterNum != EOC_CLUSTER) {
+    if (clusterNum != BAD_CLUSTER) {
+      // Read entire cluster contents
+      uint8_t cluster[bytesPerCluster];
+      readClusterBytes(header, clusterNum, cluster);
+      if (errno != 0) {
+        fprintf(stderr, "Failure reading cluster %u contents in %s\n",
+                clusterNum, fooName);
+        return 0;
+      }
+
+      // Iterate over directory entries until a valid one is found
+      // Once one is found, set nextDirectory to it and store
+      // nextDirectory for following call
+      const uint32_t dirsPerCluster = bytesPerCluster / sizeof(fat32_directory);
+      fat32_directory *dir = (fat32_directory *)cluster + dirNum;
+      for (; dirNum < dirsPerCluster; ++dirNum) {
+        if (dir->DIR_Name[0] == LAST_DIR_ENTRY_NAME) {
+          break;
+        } else if ((dir->DIR_Name[0] != FREE_DIR_ENTRY_NAME) &&
+                   (dir->DIR_Attr != ATTR_LONG_NAME) &&
+                   (dir->DIR_Attr != ATTR_LONG_NAME_MASK)) {
+          *nextDirectory = *dir;
+          ++dirNum;
+          return clusterNum;
+        }
+        ++dir;
+      }
+      dirNum = 0;
+    }
+    clusterNum = nextCluster;
+    nextCluster = fatEntry(header, clusterNum);
+    if (errno != 0) {
+      fprintf(stderr, "Failure following cluster chain in %s\n", fooName);
+      return 0;
+    }
+  }
+  return 0;
+}
+
+uint32_t numFreeClusters(const fat32_header *const header) {
+  const char fooName[] = "numFreeClusters";
+  uint32_t clusterNum = FIRST_DATA_CLUSTER_NUM;
+
+  // Arg Validity
+  argValidityCheck(header, "header", fooName);
+  if (errno != 0) {
+    return 0;
+  }
+
+  // Iterate FAT entries of data clusters and accumulate free entries
+  uint32_t numFree = 0;
+  const fat32_bootSector *const bs = &header->bootSector;
+  const uint32_t totNumClusters =
+      ((uint64_t)bs->BPB_TotSec32 - (bs->BPB_NumFATs + bs->BPB_FATSz32)) /
+          bs->BPB_SecPerClus +
+      FIRST_DATA_CLUSTER_NUM;
+
+  uint32_t nextCluster = fatEntry(header, clusterNum);
+  if (errno != 0) {
+    fprintf(stderr, "Failure following cluster chain in %s\n", fooName);
+    return 0;
+  }
+
+  while (clusterNum < totNumClusters) {
+    numFree += (uint32_t)(nextCluster == EMPTY_CLUSTER);
+    ++clusterNum;
+    nextCluster = fatEntry(header, clusterNum);
+    if (errno != 0) {
+      fprintf(stderr, "Failure reading FAT entry for cluster %u in %s\n",
+              clusterNum, fooName);
+      return 0;
+    }
+  }
+  return numFree;
+}
+#pragma once
+/**
+ * @file commands.h
+ * @author Justen Di Ruscio
+ * @brief Contained in this file are the function declarations for handlers of shell commands. Additionally, functions necessary to service the shell commands with these handlers are included.
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include "../../fat32/fat32.h"
+
+/**
+ * @brief Prints volume info for FAT32 file system
+ *
+ * @param header FAT32 header
+ */
+void printInfo(const fat32_header* const header);
+void doDir(const fat32_header *const header, const uint32_t curDirClus);
+
+/**
+ * @brief Returns first cluster of directory specified as arg1 in buffer. Sets errno on error and returns 0
+ *
+ * @param header FAT32 header
+ * @param curDirClus cluster number of current location; where specified directory is located
+ * @param buffer command line of shell that includes desired directory as arg1
+ * @return uint32_t the cluster number of specified directory or 0 on error
+ */
+uint32_t doCD(const fat32_header *const header, const uint32_t curDirClus,
+              const char *const buffer);
+
+/**
+ * @brief Downloads the file specified in arg1 of buffer to the CWD of the program. Sets errno on error
+ *
+ * @param header FAT32 header
+ * @param curDirClus first cluster of directory where specified file resides
+ * @param buffer command line of shell that includes desired file as arg1
+ */
+void doGet(const fat32_header *const header, const uint32_t curDirClus,
+                const char *const buffer);
+
+/**
+ * @brief Returns arg1 of command line from shell. Sets errno on error
+ *
+ * @param buffer command line of shell
+ * @return char* arg1
+ */
+char *getArg1(const char *const buffer);
+#pragma once
+/**
+ * @file shell.h
+ * @author Justen Di Ruscio
+ * @brief Contains declarations of public functions necessary for assignment 4 shell
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+/**
+ * @brief Input loop of shell
+ *
+ * @param fd file descriptor of disk image provided to fat32 program
+ */
+void shellLoop(int fd);
+/**
+ * @file cd.c
+ * @author Justen Di Ruscio
+ * @brief Contains function handler definition for CD command
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+#include "commands.h"
+
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "../../error/error.h"
+#include "../../fat32/directory.h"
+#include "../../fat32/fat.h"
+
+uint32_t doCD(const fat32_header *const header, const uint32_t curDirClus,
+              const char *const buffer) {
+  const char fooName[] = "doCD";
+
+  // Argument Validity
+  argValidityCheck(header, "header", fooName);
+  if (errno != 0) {
+    return 0;
+  }
+
+  const char *const directoryName = getArg1(buffer);
+  if (errno != 0) {
+    return 0;
+  }
+
+  // Read first directory entry
+  fat32_directory dir;
+  uint32_t dirClusterNum = nextDirEntry(header, &dir, &curDirClus);
+  if (errno != 0) {
+    fprintf(stderr,
+            "Failure reading first directory entry of cluster %u in %s\n",
+            curDirClus, fooName);
+    return 0;
+  }
+
+  // Find directory with specified name and return cluster of its contents
+  while (dirClusterNum) {
+    char currentDirName[DIR_NAME_LENGTH + 1];
+    dirName(currentDirName, (char *)dir.DIR_Name);
+    if (strcmp(currentDirName, directoryName) == 0) { // found dir
+      if (dir.DIR_Attr & ATTR_DIRECTORY) {
+        uint32_t contentClusterNum =
+            dir.DIR_FstClusHI << 16 | (uint32_t)dir.DIR_FstClusLO;
+        if (contentClusterNum == 0) { // cd'd to root dir
+          contentClusterNum = header->bootSector.BPB_RootClus;
+        }
+        return contentClusterNum;
+      } else {
+        fprintf(stderr, "%s is not a directory\n", directoryName);
+        errno = ENOTDIR;
+        return 0;
+      }
+    }
+
+    // Read next directory entry
+    dirClusterNum = nextDirEntry(header, &dir, NULL);
+    if (errno != 0) {
+      fprintf(stderr, "Failure reading next directory entry in %s\n", fooName);
+      return 0;
+    }
+  }
+
+  fprintf(stderr, "%s does not exist\n", directoryName);
+  errno = ENOENT;
+  return 0;
+}
+/**
+ * @file commands.c
+ * @author Justen Di Ruscio
+ * @brief Contained in this file are the function definitions for the support
+ * functions necessary to service the shell commands. Command handlers have
+ * separate files
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+#include "commands.h"
+
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+
+#define DELIM " \t" // delimeter of command arguments
+
+char *getArg1(const char *const buffer) {
+  const char fooName[] = "getArg1";
+  // Read directory
+  if (strtok((char *)buffer, DELIM) == NULL) {
+    fprintf(stderr, "Unable to read first token from input command %s in %s\n",
+            buffer, fooName);
+    errno = EINVAL;
+    return NULL;
+  }
+  char *const arg1 = strtok(NULL, DELIM);
+  if (arg1 == NULL) {
+    fprintf(stderr, "Expected second argument for command %s in %s\n", buffer,
+            fooName);
+    errno = EINVAL;
+  }
+  return arg1;
+}
+#include "commands.h"
+
+#include <errno.h>
+#include <stdio.h>
+#include <unistd.h>
+
+#include "../../error/error.h"
+#include "../../fat32/directory.h"
+#include "../../fat32/fat.h"
+#include "../../fat32/fat32.h"
+
+void doDir(const fat32_header *const header, const uint32_t curDirClus) {
+  const char fooName[] = "doDir";
+
+  // Arg Validity
+  argValidityCheck(header, "header", fooName);
+  if (errno != 0) {
+    return;
+  }
+
+  // List current directory contents spread across all pertinent clusters
+  printf("\nDIRECTORY LISTING\nVOL_ID: %s\n\n", header->volumeId);
+
+  // Read first directory entry
+  fat32_directory dir;
+  bool dirFound = nextDirEntry(header, &dir, &curDirClus);
+  if (errno != 0) {
+    fprintf(stderr,
+            "Failure reading first directory entry of cluster %u in %s\n",
+            curDirClus, fooName);
+    return;
+  }
+
+  while (dirFound) {
+    if (dir.DIR_Attr != ATTR_VOLUME_ID) {
+      // Form dir name
+      char dirEntryName[DIR_NAME_LENGTH + 1];
+      dirName(dirEntryName, (char *)dir.DIR_Name);
+      const bool isDir = dir.DIR_Attr == ATTR_DIRECTORY;
+
+      // Print directory entry
+      printf("%s%s%s\t%u\n", isDir ? "<" : "", dirEntryName, isDir ? ">" : "",
+             dir.DIR_FileSize);
+    }
+
+    // Read next directory entry
+    dirFound = nextDirEntry(header, &dir, NULL);
+    if (errno != 0) {
+      fprintf(stderr, "Failure reading next directory entry in %s\n", fooName);
+      return;
+    }
+  }
+
+  // Print out footer
+  const uint64_t bytesPerCluster =
+      header->bootSector.BPB_BytesPerSec * header->bootSector.BPB_SecPerClus;
+  printf("--Bytes Free: %lu\n--DONE\n",
+         bytesPerCluster * header->fsInfo.FSI_Free_Count);
+}
+/**
+ * @file get.c
+ * @author Justen Di Ruscio
+ * @brief Contains function handler definition for GET command and any other
+ * functions required by handler
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+#include "commands.h"
+
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "../../error/error.h"
+#include "../../fat32/directory.h"
+#include "../../fat32/fat.h"
+
+#define CWD_PATH_MAX_LEN 150
+
+/**
+ * @brief Returns min of arguments
+ *
+ * @param a first argument to compare
+ * @param b second argument to compare
+ * @return uint32_t either a or b, whichever is smaller
+ */
+static uint32_t min(const uint32_t a, const uint32_t b) {
+  if (a <= b) {
+    return a;
+  }
+  return b;
+}
+
+/**
+ * @brief Follows cluster chain that specifies a file, starting at
+ * startClusterNum, writing contents to a file in the program's CWD with the
+ * name fileName. Sets errno on error
+ *
+ * @param header FAT32 header
+ * @param fileName name of file to download cluster contents to
+ * @param fileSize total file size of cluster chain in bytes
+ * @param startClusterNum first cluster number of cluster chain
+ */
+static void downloadFile(const fat32_header *const header,
+                         const char fileName[DIR_NAME_LENGTH + 1],
+                         uint32_t fileSize, const uint32_t startClusterNum) {
+  const char fooName[] = "downloadFile";
+  uint32_t clusterNum = startClusterNum;
+  // Arg Validity
+  argValidityCheck(header, "header", fooName);
+  if (errno != 0) {
+    return;
+  }
+
+  // Create path for
+  FILE *destFile = fopen(fileName, "w");
+  if (destFile == NULL) {
+    return; // errno set by fopen
+  }
+
+  // Follow cluster chain starting at startClusterNum and write contents to file
+  const fat32_bootSector *const bs = &header->bootSector;
+  const uint32_t bytesPerCluster = bs->BPB_BytesPerSec * bs->BPB_SecPerClus;
+
+  uint32_t nextCluster = fatEntry(header, clusterNum);
+  if (errno != 0) {
+    fprintf(stderr, "Failure following cluster chain in %s\n", fooName);
+    fclose(destFile);
+    return;
+  }
+
+  while (clusterNum != EOC_CLUSTER) {
+    if (clusterNum != BAD_CLUSTER) {
+      // Read entire cluster contents
+      uint8_t cluster[bytesPerCluster];
+      readClusterBytes(header, clusterNum, cluster);
+      if (errno != 0) {
+        fprintf(stderr, "Failure reading cluster %u contents in %s\n",
+                clusterNum, fooName);
+        fclose(destFile);
+        return;
+      }
+
+      // Write cluster contents to file
+      const uint32_t bytesToWrite = min(fileSize, bytesPerCluster);
+      const size_t bytesWritten =
+          fwrite(cluster, sizeof(uint8_t), bytesToWrite, destFile);
+      if (bytesWritten != bytesToWrite) {
+        fprintf(stderr,
+                "Failure writing bytes in cluster %u to file %s in %s\n",
+                clusterNum, fileName, fooName);
+        fclose(destFile);
+        return;
+      }
+      fileSize -= bytesWritten;
+    }
+    clusterNum = nextCluster;
+    nextCluster = fatEntry(header, clusterNum);
+    if (errno != 0) {
+      fprintf(stderr, "Failure following cluster chain in %s\n", fooName);
+      fclose(destFile);
+      return;
+    }
+  }
+  fclose(destFile);
+}
+
+// ================= Public Functions ====================
+
+void doGet(const fat32_header *const header, const uint32_t curDirClus,
+           const char *const buffer) {
+  const char fooName[] = "doGet";
+
+  // Arg Valididy
+  argValidityCheck(header, "header", fooName);
+  if (errno != 0) {
+    return;
+  }
+  argValidityCheck(buffer, "buffer", fooName);
+  if (errno != 0) {
+    return;
+  }
+
+  const char *const fileName = getArg1(buffer);
+  if (errno != 0) {
+    return;
+  }
+
+  // Read first directory entry
+  fat32_directory dir;
+  uint32_t dirClusterNum = nextDirEntry(header, &dir, &curDirClus);
+  if (errno != 0) {
+    fprintf(stderr,
+            "Failure reading first directory entry of cluster %u in %s\n",
+            curDirClus, fooName);
+    return;
+  }
+
+  // Find file with specified name and download its contents
+  while (dirClusterNum) {
+    char currentDirName[DIR_NAME_LENGTH + 1];
+    dirName(currentDirName, (char *)dir.DIR_Name);
+    if (strcmp(currentDirName, fileName) == 0) { // found file
+      if (dir.DIR_Attr & ATTR_DIRECTORY) {
+        fprintf(stderr, "%s is a directory\n", fileName);
+        errno = EISDIR;
+        return;
+      } else if (dir.DIR_Attr & ATTR_VOLUME_ID) {
+        fprintf(stderr, "%s is not a downloadable file\n", fileName);
+        errno = ENOENT;
+        return;
+      } else {
+        const uint32_t contentClusterNum =
+            dir.DIR_FstClusHI << 16 | (uint32_t)dir.DIR_FstClusLO;
+        downloadFile(header, currentDirName, dir.DIR_FileSize,
+                     contentClusterNum);
+        printf("Done.\n");
+        return; // errno set by downloadFile
+      }
+    }
+
+    // Read next directory entry
+    dirClusterNum = nextDirEntry(header, &dir, NULL);
+    if (errno != 0) {
+      fprintf(stderr, "Failure reading next directory entry in %s\n", fooName);
+      return;
+    }
+  }
+
+  fprintf(stderr, "%s does not exist\n", fileName);
+  errno = ENOENT;
+  return;
+}
+/**
+ * @file info.c
+ * @author Justen Di Ruscio
+ * @brief Contains function handler definition for INFO command and any other
+ * support functions required by handler
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+#include "commands.h"
+
+#include "../../error/error.h"
+
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+
+#define BYTES_IN_MEG 1000000    // conversion ratio of # bytes in 1 megabyte
+#define BYTES_IN_GIG 1000000000 // conversion ratio of # bytes in 1 gigabyte
+
+/**
+ * @brief Prints the device info section for the FAT32 volume. Sets errno on
+ * error
+ *
+ * @param bs FAT32 header
+ */
+static void printDeviceInfo(const fat32_bootSector *const bs) {
+  const char fooName[] = "printDeviceInfo";
+
+  // Set fields from boot sector values
+  const char *const oemName = bs->BS_OEMName;
+
+  // copy max num chars in label
+  const unsigned labelLength = 12;
+  char label[labelLength];
+  strncpy(label, bs->BS_VolLab, labelLength);
+  label[labelLength - 1] = '\0';
+
+  // copy max num chars in file system type
+  const unsigned fsLength = 6;
+  char fsTypeStr[fsLength];
+  strncpy(fsTypeStr, bs->BS_FilSysType, fsLength);
+
+  // convert media type number to string with explanation in brackets
+  const unsigned maxMediaLength = 17;
+  char mediaType[maxMediaLength];
+  const uint8_t mediaVal = bs->BPB_Media;
+  char *mediaBracket = "fixed";
+  if (mediaVal != 0xF8) {
+    if (mediaVal == 0xF0) {
+      mediaBracket = "removable";
+    } else {
+      mediaBracket = "unknown";
+    }
+  }
+  int numBytes =
+      snprintf(mediaType, maxMediaLength, "0x%x (%s)", mediaVal, mediaBracket);
+  if (numBytes < 0) {
+    fprintf(stderr, "Failure converting BPB_Media to string in %s\n", fooName);
+    errno = EIO;
+    return;
+  }
+
+  // calculate total volume size
+  const uint64_t sizeInt = (uint64_t)bs->BPB_BytesPerSec * bs->BPB_TotSec32;
+  const uint32_t megaBytes = (uint32_t)((double)sizeInt / BYTES_IN_MEG);
+  const float gigaBytes = (double)sizeInt / BYTES_IN_GIG;
+
+  // convert drive number to string and put explanation in brackets
+  const unsigned driveLength = 18;
+  const uint8_t driveInt = bs->BS_DrvNum;
+  char *driveBracket = "";
+  if (driveInt == 0x80) {
+    driveBracket = "hard disk";
+  } else if (driveInt == 0x00) {
+    driveBracket = "floppy disk";
+  }
+  char driveNum[driveLength];
+  numBytes = snprintf(driveNum, driveLength, "%u (%s)", driveInt, driveBracket);
+  if (numBytes < 0) {
+    fprintf(stderr, "Failure converting BS_DrvNum to string in %s\n", fooName);
+    errno = EIO;
+    return;
+  }
+  driveNum[numBytes] = '\0';
+
+  // Print Results
+  printf("---- Device Info ----\n"
+         "OEM Name: %s\n"
+         "Label: %s\n"
+         "File System Type: %s\n"
+         "Media Type: %s\n"
+         "Size: %zu bytes (%i MiB, %5.3f GiB)\n"
+         "Drive Number: %s\n",
+         oemName, label, fsTypeStr, mediaType, sizeInt, megaBytes, gigaBytes,
+         driveNum);
+}
+
+/**
+ * @brief Prints the file system geometry section for the FAT32 volume
+ *
+ * @param bs FAT32 boot sector; part of FAT32 header
+ */
+static void printGeometry(const fat32_bootSector *const bs) {
+  // Print boot sector fields
+  printf("\n--- Geometry ---\n"
+         "Bytes per Sector: %u\n"
+         "Sectors Per Cluster: %u\n"
+         "Total Sectors: %u\n"
+         "Geom: Sectors per Track %u\n"
+         "Geom: Heads: %u\n"
+         "Hidden Sectors: %u\n",
+         bs->BPB_BytesPerSec, bs->BPB_SecPerClus, bs->BPB_TotSec32,
+         bs->BPB_SecPerTrk, bs->BPB_NumHeads, bs->BPB_HiddSec);
+}
+
+/**
+ * @brief Prints generic file system info for the FAT32 volume
+ *
+ * @param header FAT32 header
+ */
+static void printFilesystemInfo(const fat32_header *const header) {
+  const fat32_bootSector *const bs = &header->bootSector;
+  const int mirror = bs->BPB_ExtFlags & 0x01;
+  printf("\n--- FS Info ---\n"
+         "Volume ID: %s\n"
+         "Version: %u.%u\n"
+         "Reserved Sectors: %u\n"
+         "Number of FATs: %u\n"
+         "FAT Size: %u\n"
+         "Mirrored FAT: %u (%s)\n"
+         "Boot Sector Backup Sector No: %u\n",
+         header->volumeId, bs->BPB_FSVerHigh, bs->BPB_FSVerLow,
+         bs->BPB_RsvdSecCnt, bs->BPB_NumFATs, bs->BPB_FATSz32, mirror,
+         mirror ? "no" : "yes", bs->BPB_BkBootSec);
+}
+
+// ======================== Public Functions ==================
+
+void printInfo(const fat32_header *const header) {
+  const char fooName[] = "printInfo";
+
+  // Arg Validity
+  argValidityCheck(header, "header", fooName);
+  if (errno != 0) {
+    return; // errno set by argValidityCheck
+  }
+
+  // Print Info
+  printDeviceInfo(&header->bootSector);
+  if (errno != 0) {
+    fprintf(stderr, "Failed printing device information in %s\n", fooName);
+    return; // errno set by printDeviceInfo
+  }
+  printGeometry(&header->bootSector);
+  printFilesystemInfo(header);
+}
+/**
+ * @file shell.c
+ * @author Justen Di Ruscio
+ * @brief Contains main shell loop for fat32 program of assignment 4 and any
+ * other necessary functions pertaining to shell itself
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+#include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include "../fat32/fat.h"
+#include "../fat32/fat32.h"
+#include "commands/commands.h"
+#include "shell.h"
+
+#define BUF_SIZE 256
+#define CMD_INFO "INFO"
+#define CMD_DIR "DIR"
+#define CMD_CD "CD"
+#define CMD_GET "GET"
+#define CMD_PUT "PUT"
+
+/**
+ * @brief Prints error message in response to a single command failing
+ *
+ */
+static void commandError(const char *const cmdName, const char *fooName) {
+  fprintf(stderr, "Failed performing %s in %s: %s\n", cmdName, fooName,
+          strerror(errno));
+}
+
+void shellLoop(const int fd) {
+  const char fooName[] = "shellLoop";
+  int running = true;
+  uint32_t curDirClus;
+  char buffer[BUF_SIZE];
+  char bufferRaw[BUF_SIZE];
+
+  fat32_header *const header = readHeader(fd);
+  if (header == NULL)
+    running = false;
+  else { // valid, grab the root cluster
+    curDirClus = header->bootSector.BPB_RootClus;
+  }
+
+  while (running) {
+    printf(">");
+    if (fgets(bufferRaw, BUF_SIZE, stdin) == NULL) {
+      running = false;
+      continue;
+    }
+    bufferRaw[strlen(bufferRaw) - 1] = '\0'; /* cut new line */
+    for (unsigned i = 0; i < strlen(bufferRaw) + 1; i++)
+      buffer[i] = toupper(bufferRaw[i]);
+
+    if (strncmp(buffer, CMD_INFO, strlen(CMD_INFO)) == 0) {
+      printInfo(header);
+      if (errno != 0) {
+        commandError(CMD_INFO, fooName);
+      }
+    } else if (strncmp(buffer, CMD_DIR, strlen(CMD_DIR)) == 0) {
+      doDir(header, curDirClus);
+      if (errno != 0) {
+        commandError(CMD_DIR, fooName);
+      }
+    } else if (strncmp(buffer, CMD_CD, strlen(CMD_CD)) == 0) {
+      const uint32_t newClusterNum = doCD(header, curDirClus, buffer);
+      if (errno != 0) {
+        commandError(CMD_CD, fooName);
+      } else {
+        curDirClus = newClusterNum;
+      }
+    } else if (strncmp(buffer, CMD_GET, strlen(CMD_GET)) == 0) {
+      doGet(header, curDirClus, buffer);
+      if (errno != 0) {
+        commandError(CMD_GET, fooName);
+      }
+    } else if (strncmp(buffer, CMD_PUT, strlen(CMD_PUT)) == 0)
+      // doUpload(h, curDirClus, buffer, bufferRaw);
+      printf("Bonus marks!\n");
+    else
+      printf("\nCommand not found\n");
+  }
+  printf("\nExited...\n");
+
+  cleanupHeader(header);
+}
+#pragma once
+/**
+ * @file error.h
+ * @author Justen Di Ruscio
+ * @brief Contains declarations related to error handling or printing
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+/**
+ * @brief Checks if arg is NULL. If it is, an error message will be printed as if it came from fooName and errno will be set. Otherwise, errno is 0
+ *
+ * @param arg argument to check for NULL
+ * @param argName name of arg for error message
+ * @param fooName name of function for error message
+ */
+void argValidityCheck(const void * const arg, const char *const argName,
+                      const char *const fooName);
+/**
+ * @file error.c
+ * @author Justen Di Ruscio
+ * @brief Contains definitions related to error handling or printing
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include "error.h"
+
+#include <errno.h>
+#include <stdio.h>
+
+void argValidityCheck(const void *const arg, const char *const argName,
+                      const char *const fooName) {
+  errno = 0;
+  if (arg == NULL) {
+    fprintf(stderr, "Argument '%s' of %s must point to a valid address\n",
+            argName, fooName);
+    errno = EPERM;
+  }
+}
+/**
+ * @file main.c
+ * @author Justen Di Ruscio
+ * @brief Main program of assignment 4; the fat32 filesystem reader
+ * @version 0.1
+ * @date 2021-04-14
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include "shell/shell.h"
+
+int main(int argc, char *argv[]) {
+  if (argc != 2) {
+    printf("Usage: %s <file>\n", argv[0]);
+    exit(EXIT_FAILURE);
+  }
+
+  const char *const file = argv[1];
+  const int fd = open(file, O_RDWR);
+  if (fd == -1) {
+    perror("opening file: ");
+    exit(EXIT_FAILURE);
+  }
+
+  shellLoop(fd);
+
+  close(fd);
+
+  return EXIT_SUCCESS;
+}
